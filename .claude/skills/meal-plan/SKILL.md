@@ -17,10 +17,11 @@ description: >-
 
 Taryn's household needs a low-effort answer to "what's for dinner" each
 week, not a recipe-browsing session. This skill exists so that every Friday
-(and any time it's invoked mid-week) produces the same reliable output: four
-easy, healthy-ish weeknight dinners and one shopping list that's actually
-usable at the store — merged, organized by aisle, and free of things
-already in the pantry.
+(and any time it's invoked mid-week) produces the same reliable output:
+three easy, healthy-ish weeknight dinners — one of them hands-off in the
+slow cooker, for the night nobody wants to stand at the stove — and one
+shopping list that's actually usable at the store — merged, organized by
+aisle, and free of things already in the pantry.
 
 ## Household (fixed context — don't re-ask)
 
@@ -55,15 +56,19 @@ bar, cut it before presenting it.
      don't ask again if they already answered it earlier in the
      conversation or gave the info unprompted.
 
-2. **Pick four dinners.** Rotate proteins across the week (don't repeat the
-   same one twice) and vary cuisine/prep style so it doesn't feel
-   repetitive week to week. Favor sheet-pan, one-pot, or simple
-   stovetop/oven meals over anything with more than ~6 active steps. Note a
-   toddler-friendly adjustment inline where a dish runs spicy, tough to
-   chew, or otherwise isn't a straightforward serve (e.g. "set aside plain
-   pasta + chicken for [toddler] before adding sauce").
+2. **Pick three dinners, one of them a slow cooker recipe.** Rotate
+   proteins across the week (don't repeat the same one twice) and vary
+   cuisine/prep style so it doesn't feel repetitive week to week. Exactly
+   one of the three should be built around the slow cooker — a
+   dump-and-go recipe with under 15 minutes of hands-on time, meant for a
+   day nobody has the bandwidth to stand at the stove. The other two
+   follow the usual bar: sheet-pan, one-pot, or simple stovetop/oven meals,
+   nothing with more than ~6 active steps. Note a toddler-friendly
+   adjustment inline where a dish runs spicy, tough to chew, or otherwise
+   isn't a straightforward serve (e.g. "set aside plain pasta + chicken for
+   [toddler] before adding sauce").
 
-3. **Build the grocery list.** Consolidate ingredients across all four
+3. **Build the grocery list.** Consolidate ingredients across all three
    dinners into one list — merge duplicates (e.g. two dinners calling for
    an onion becomes one line, "2 onions"), and drop anything the user said
    they already have. Group by store section: Produce, Meat & Seafood,
@@ -79,7 +84,7 @@ bar, cut it before presenting it.
    in the artifact gallery.
 
 5. **Hand off.** Reply with the artifact link and a one-line summary of the
-   four dinners. On an automated run, this reply is the entire output —
+   three dinners. On an automated run, this reply is the entire output —
    there's no user present to react to it, so don't end with a question.
 
 ## Output format
@@ -87,20 +92,22 @@ bar, cut it before presenting it.
 Structure the artifact content as:
 
 - **Header**: "Week of [date range]"
-- **Four dinner cards**, one per weeknight, each showing: night label (or
-  "Night 1" if not date-bound), dish name, the protein, a one-line
-  description, and any toddler-adjustment note.
+- **Three dinner cards**, one per night, each showing: night label (or
+  "Night 1" if not date-bound; mark the slow-cooker one clearly, e.g.
+  "Monday · slow cooker"), dish name, the protein, a one-line description,
+  and any toddler-adjustment note.
 - **Grocery list**: grouped by store section as in step 3, each item as a
   checkable line (`- [ ] item — quantity`) so it works as a shopping
   checklist.
 
 ## Calibration
 
-Four dinners and dinner-only is the default scope — don't expand to seven
-nights, lunches, or breakfasts unless the user asks for that explicitly in
-the request. Conversely, don't shrink to fewer than four or skip the
-grocery list even if the user only asked "what's for dinner" — the list is
-the point of the skill, not an optional extra.
+Three dinners, one of them slow-cooker, and dinner-only is the default
+scope — don't expand to seven nights, lunches, or breakfasts unless the
+user asks for that explicitly in the request. Conversely, don't shrink
+below three, don't drop the slow-cooker night, and don't skip the grocery
+list even if the user only asked "what's for dinner" — the list is the
+point of the skill, not an optional extra.
 
 ## Example
 
@@ -109,9 +116,10 @@ the freezer already, use that on one night"
 
 → Ask once: "Got it, one night built around the ground turkey you've got.
 Anything else already in the fridge/pantry I should plan around, or any
-nights to skip?" Then proceed with four dinners (one featuring the turkey,
-turkey omitted from the grocery list), consolidated list, published
-artifact, link + one-line summary in reply.
+nights to skip?" Then proceed with three dinners — one of them a slow
+cooker recipe, one featuring the turkey (turkey omitted from the grocery
+list) — consolidated list, published artifact, link + one-line summary in
+reply.
 
 Automated Friday firing (no user present): generate immediately using
 household defaults, publish the artifact, and reply with the link and
