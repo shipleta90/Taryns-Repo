@@ -1,13 +1,13 @@
 :root {
-  --color-bg: #fbfaf7;
-  --color-ink: #17140f;
-  --color-muted: #58534a;
-  --color-border: rgba(23, 20, 15, 0.14);
-  --color-border-strong: rgba(23, 20, 15, 0.28);
-  --color-accent: #b5502e;
-  --color-accent-soft: #c97b54;
-  --color-accent-deep: #5c2a18;
-  --color-cream: #f3efe6;
+  --color-bg: #f6f6f5;
+  --color-ink: #15171a;
+  --color-muted: #5b5f66;
+  --color-border: rgba(21, 23, 26, 0.12);
+  --color-border-strong: rgba(21, 23, 26, 0.26);
+  --color-accent: #45607a;
+  --color-accent-soft: #7793a9;
+  --color-accent-deep: #263644;
+  --color-cream: #eef0f1;
   --font-display: "Fraunces", Georgia, serif;
   --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", "SF Mono", Menlo, monospace;
