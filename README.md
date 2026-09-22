@@ -10,16 +10,14 @@ A simple static one-page site for launching independent operations consulting wo
 
 No build step, no dependencies. Open `index.html` directly in a browser, or serve the folder with any static file server.
 
-## Content still needed
+## Content status
 
-Search the page for `[EDIT ME]` — these are placeholder spots for you to fill in with real content:
-
-- **About section** — your background, experience, and what makes your approach distinct
-- **Selected Engagements** (3 placeholder cards) — real project/client examples: situation, what you did, outcome
+- **About section** — filled in from your resume (Allē/Allergan, Amazon/AWS, J.D.)
+- **Case studies / selected engagements** — not yet added; worth a dedicated section once you have 2-3 real client engagements to describe
 
 ## Contact
 
-The "Let's talk" button is a `mailto:` link to `taryn.shipley@gmail.com`. Update the address in `index.html` if needed, or swap it for a real form service (e.g. Formspree) later.
+The "Email Taryn" button is a `mailto:` link to `taryn.shipley@gmail.com`. Update the address in `index.html` if needed, or swap it for a real form service (e.g. Formspree) later.
 
 ## Deploying (free options)
 
