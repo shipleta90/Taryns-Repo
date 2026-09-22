@@ -4,8 +4,9 @@
   --color-muted: #58534a;
   --color-border: rgba(23, 20, 15, 0.14);
   --color-border-strong: rgba(23, 20, 15, 0.28);
-  --color-accent: #1d4d3a;
-  --color-accent-soft: #3c6d59;
+  --color-accent: #b5502e;
+  --color-accent-soft: #c97b54;
+  --color-accent-deep: #5c2a18;
   --color-cream: #f3efe6;
   --font-display: "Fraunces", Georgia, serif;
   --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -184,7 +185,7 @@ a {
 
 .btn-primary {
   margin-top: 40px;
-  background: var(--color-accent);
+  background: var(--color-accent-deep);
   color: var(--color-cream);
 }
 
@@ -340,7 +341,7 @@ a {
 /* Contact band */
 
 .contact-band {
-  background: var(--color-accent);
+  background: var(--color-accent-deep);
   color: var(--color-cream);
 }
 
@@ -364,7 +365,7 @@ a {
 
 .btn-invert {
   background: var(--color-cream);
-  color: var(--color-accent);
+  color: var(--color-accent-deep);
 }
 
 .contact-links {
