@@ -75,4 +75,6 @@ def decide(msg: Message, engaged: EngagedSet) -> Decision:
         return Decision(Action.LABEL, "engaged sender/domain")
     if is_promotion(msg):
         return Decision(Action.TRASH, f"promotion from never-engaged domain {domain}")
-    return Decision(Action.LABEL, "not a promotion")
+    cats = ",".join(sorted(l.removeprefix("CATEGORY_") for l in msg.labels if l.startswith("CATEGORY_"))) or "none"
+    unsub = "yes" if msg.has_list_unsubscribe else "no"
+    return Decision(Action.LABEL, f"not a promotion (gmail category: {cats}; unsubscribe header: {unsub})")
