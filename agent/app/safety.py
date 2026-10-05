@@ -12,7 +12,13 @@ _CARD = re.compile(r"\b(?:\d[ -]?){13,19}\b")
 _KEYWORDS = re.compile(
     r"social security|\bssn\b|routing number|account number|\biban\b|\bswift\b|"
     r"bank statement|wire transfer|tax return|\bw-?2\b|\b1099\b|"
-    r"credit card|debit card|\bcvv\b|\bpassword\b|one-time (?:code|passcode)|verification code",
+    r"credit card|debit card|\bcvv\b|\bpassword\b|one-time (?:code|passcode)|verification code|"
+    # health / therapy
+    r"patient portal|client portal|\btherap(?:y|ist)\b|\bdiagnosis\b|\bprescription\b|"
+    r"medical record|lab results|\bappointment reminder\b|"
+    # legal / family court
+    r"\battorney\b|\bcustody\b|\bdivorce\b|post-judgment|\bsubpoena\b|\blitigation\b|"
+    r"\bIRMO\b|\bv\.? [A-Z][a-z]+\b.*\bmatter\b|\bmatter for\b|payment plan reminder|court (?:date|order|hearing)",
     re.IGNORECASE,
 )
 # Senders that are financial/government regardless of what the message body says.
@@ -21,6 +27,11 @@ FINANCIAL_DOMAINS = {
     "americanexpress.com", "discover.com", "schwab.com", "fidelity.com", "vanguard.com",
     "paypal.com", "venmo.com", "stripe.com", "irs.gov", "ssa.gov", "turbotax.com",
     "intuit.com", "mint.com", "coinbase.com", "robinhood.com",
+}
+# Health and legal senders: kept local-only and never auto-trashed, like financial ones.
+HEALTH_LEGAL_DOMAINS = {
+    "simplepractice.com", "zocdoc.com", "mychart.com", "teladoc.com", "kp.org",
+    "healthgrades.com", "headway.co", "alma.com", "betterhelp.com", "talkspace.com",
 }
 
 
@@ -49,6 +60,8 @@ def assess(text: str, sender_domain: str = "") -> Sensitivity:
     reasons: list[str] = []
     if sender_domain and (sender_domain in FINANCIAL_DOMAINS or sender_domain.endswith(".gov")):
         reasons.append("financial-or-government-sender")
+    if sender_domain in HEALTH_LEGAL_DOMAINS:
+        reasons.append("health-or-legal-sender")
     if _SSN.search(text):
         reasons.append("ssn-pattern")
     for m in _CARD.finditer(text):
