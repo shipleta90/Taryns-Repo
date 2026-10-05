@@ -6,6 +6,7 @@ Policy (from the build spec):
   * Everything else is labelled so we know we've seen it, and left alone.
 The model is never involved in these decisions, so a malicious email cannot steer them.
 """
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -50,11 +51,32 @@ class EngagedSet:
         return address in self.addresses or (domain is not None and domain in self.domains)
 
 
+_PROMO_WORDS = re.compile(
+    r"\d+\s?% (?:off|back)|\$\d+ (?:off|credit)|\b(?:sale|discount|coupon|promo(?:tion|code)?|deals?)\b|"
+    r"free shipping|limited[- ]time|exclusive (?:offer|deal)|\b(?:give|save|get) up to\b|"
+    r"shop now|last chance|don'?t miss|black friday|\bbecome a member\b|\bclaim your\b|\bsponsored\b",
+    re.IGNORECASE,
+)
+_TRANSACTIONAL = re.compile(
+    r"\b(?:order|receipt|invoice|shipped|shipping|delivery|delivered|tracking|confirm(?:ation|ed)?|"
+    r"password|security|verify|verification|sign[- ]in|statement|payment|renewal|booking|"
+    r"reservation|ticket|appointment|schedule|cancel(?:led|ed)?)\b",
+    re.IGNORECASE,
+)
+
+
 def is_promotion(msg: Message) -> bool:
-    return PROMO_LABEL in msg.labels or (
-        msg.has_list_unsubscribe and "CATEGORY_PERSONAL" not in msg.labels
-        and "CATEGORY_UPDATES" not in msg.labels
-    )
+    if PROMO_LABEL in msg.labels:
+        return True
+    if not msg.has_list_unsubscribe or "CATEGORY_PERSONAL" in msg.labels:
+        return False
+    text = f"{msg.subject} {msg.snippet}"
+    if _TRANSACTIONAL.search(text):
+        return False
+    if "CATEGORY_UPDATES" in msg.labels:
+        # Gmail files lots of marketing under Updates; only call it a promo if it reads like one.
+        return bool(_PROMO_WORDS.search(text))
+    return True
 
 
 def decide(msg: Message, engaged: EngagedSet) -> Decision:
