@@ -13,6 +13,8 @@ from pydantic import BaseModel
 from . import service
 from .config import Settings, load_settings
 from .db import Database
+from . import briefing as briefing_mod
+from .llm import LocalLLM
 from .scheduler import daily
 
 STATIC = Path(__file__).parent / "static"
@@ -23,7 +25,8 @@ class TriageRequest(BaseModel):
     dry_run: bool = True
 
 
-def create_app(settings: Settings | None = None, gmail=None, db: Database | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, gmail=None, db: Database | None = None,
+               llm: LocalLLM | None = None) -> FastAPI:
     settings = settings or load_settings()
     db = db or Database(settings.db_path)
     if not settings.token:
@@ -42,7 +45,22 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
         if scheme.lower() != "bearer" or not secrets.compare_digest(token, settings.token):
             raise HTTPException(status_code=401, detail="unauthorized")
 
+    llm = llm or LocalLLM(settings.ollama_url, settings.ollama_model)
     triage_lock = asyncio.Lock()
+    briefing_state = {"running": False, "error": None}
+
+    async def run_briefing():
+        if briefing_state["running"]:
+            return
+        briefing_state.update(running=True, error=None)
+        try:
+            await asyncio.to_thread(briefing_mod.build_briefing, get_gmail(), db, llm,
+                                    1, settings.briefing_max_items)
+        except Exception as exc:  # surfaced in the app, never crashes the server
+            log.exception("briefing failed")
+            briefing_state["error"] = str(exc)[:300]
+        finally:
+            briefing_state["running"] = False
 
     async def run_locked(dry_run: bool | None):
         async with triage_lock:  # never two triage runs at once
@@ -50,14 +68,16 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
 
     @contextlib.asynccontextmanager
     async def lifespan(_: FastAPI):
-        task = None
+        tasks = []
         if settings.triage_at:
             async def nightly():
                 await run_locked(None)
-            task = asyncio.create_task(daily(settings.triage_at, nightly))
+            tasks.append(asyncio.create_task(daily(settings.triage_at, nightly)))
+        if settings.briefing_at:
+            tasks.append(asyncio.create_task(daily(settings.briefing_at, run_briefing)))
         yield
-        if task:
-            task.cancel()
+        for t in tasks:
+            t.cancel()
 
     app = FastAPI(title="Personal Agent", lifespan=lifespan, docs_url=None, redoc_url=None)
 
@@ -90,6 +110,16 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
             raise HTTPException(status_code=404, detail="no such action")
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.get("/api/briefing", dependencies=[Depends(require_auth)])
+    def get_briefing():
+        return {"briefing": db.latest_briefing(), **briefing_state}
+
+    @app.post("/api/briefing/run", status_code=202, dependencies=[Depends(require_auth)])
+    async def start_briefing():
+        if not briefing_state["running"]:
+            asyncio.create_task(run_briefing())
+        return {"started": True}
 
     @app.get("/")
     def index():

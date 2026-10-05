@@ -27,6 +27,10 @@ class Settings:
     lookback_days: int
     triage_at: str
     data_dir: Path
+    ollama_url: str = "http://127.0.0.1:11434"
+    ollama_model: str = "llama3.1:8b"
+    briefing_at: str = "06:30"
+    briefing_max_items: int = 25
 
     @property
     def db_path(self) -> Path:
@@ -45,4 +49,8 @@ def load_settings() -> Settings:
         lookback_days=int(os.environ.get("TRIAGE_LOOKBACK_DAYS", "2")),
         triage_at=os.environ.get("TRIAGE_AT", "02:30"),
         data_dir=data_dir,
+        ollama_url=os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434"),
+        ollama_model=os.environ.get("OLLAMA_MODEL", "llama3.1:8b"),
+        briefing_at=os.environ.get("BRIEFING_AT", "06:30"),
+        briefing_max_items=int(os.environ.get("BRIEFING_MAX_ITEMS", "25")),
     )
