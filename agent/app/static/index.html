@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Agent">
+  <meta name="theme-color" content="#111827">
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/static/icon-180.png">
+  <link rel="stylesheet" href="/static/style.css">
+  <title>Agent</title>
+</head>
+<body>
+  <header>
+    <h1>Inbox</h1>
+    <span id="mode" class="pill"></span>
+  </header>
+
+  <main>
+    <section class="card">
+      <div id="summary" class="summary">Loading…</div>
+      <div class="row">
+        <button id="dry" class="secondary">Preview run</button>
+        <button id="real" class="danger">Run for real</button>
+      </div>
+      <p id="notice" class="notice" hidden></p>
+    </section>
+
+    <h2>Recent actions</h2>
+    <ul id="actions" class="list"></ul>
+  </main>
+
+  <dialog id="login">
+    <form method="dialog" id="loginForm">
+      <h2>Connect</h2>
+      <p>Enter the AGENT_TOKEN from your Mac mini.</p>
+      <input id="tokenInput" type="password" autocomplete="current-password" required>
+      <button>Save</button>
+    </form>
+  </dialog>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
