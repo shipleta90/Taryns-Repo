@@ -55,3 +55,20 @@ def test_freemail_domain_engagement_is_per_address():
     assert decide(spam, engaged).action is Action.TRASH
     friend = Message("2", "t", "pat@gmail.com", "50% off", labels=frozenset({"CATEGORY_PROMOTIONS"}))
     assert decide(friend, engaged).action is Action.LABEL
+
+
+def _updates(subject):
+    return Message("1", "t", "The JECT Team <info@jectnyc.com>", subject,
+                   labels=frozenset({"INBOX", "CATEGORY_UPDATES"}), has_list_unsubscribe=True)
+
+
+def test_marketing_filed_under_updates_is_trashed_when_unengaged():
+    m = _updates("Become A Member and Spread Joy. Give Up to 20%, Get a $50 Credit!")
+    assert decide(m, EngagedSet()).action is Action.TRASH
+    assert decide(m, EngagedSet(domains={"jectnyc.com"})).action is Action.LABEL
+
+
+def test_updates_that_are_transactional_or_neutral_are_kept():
+    for subject in ["Your order has shipped", "Welcome to your Google Cloud Free Trial",
+                    "Security alert: new sign-in", "Weekly digest", "Your receipt: 20% off applied"]:
+        assert decide(_updates(subject), EngagedSet()).action is Action.LABEL, subject
