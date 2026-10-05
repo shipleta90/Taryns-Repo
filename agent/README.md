@@ -3,8 +3,7 @@
 A private assistant that runs on your Mac mini and is used from an iPhone Home Screen web app.
 Data stays on your machine; nothing is exposed to the public internet.
 
-**Status:** inbox triage + web app (steps 1–2 of the build plan). Briefing, calendar, Slack drafts and the
-local-model router come next.
+**Status:** inbox triage, morning briefing and the web app. Calendar and Slack drafts come next.
 
 ## How it's reached (no public domain, no dynamic DNS, no open ports)
 
@@ -28,6 +27,18 @@ Safety properties: starts in **preview mode** (logs only); trash cap per run (de
 `gmail.modify` scope, which **cannot permanently delete**; no language model is involved in these
 decisions, so a malicious email can't steer them. Shared providers (gmail.com, icloud.com, …) count as
 engaged per exact address, never per domain.
+
+## Morning briefing
+
+Every morning (`BRIEFING_AT`, default 06:30) and on demand from the app, the agent summarizes the last day of
+mail with a **local model on the Mini** ([Ollama](https://ollama.com)) and lists what needs a reply.
+
+- Needs Ollama running locally and a model pulled; set `OLLAMA_MODEL` in `.env` to the exact name from `ollama list`.
+- `OLLAMA_URL` must point at this machine; the app refuses anything else, so mail text can't leave by accident.
+- Each message is summarized in its own isolated call, wrapped as untrusted data, and the model has no tools,
+  so a malicious email can at worst produce a misleading summary. It cannot send, delete or label anything.
+- Summaries use Gmail's short preview text, not full bodies (v1). Health/legal/financial items get a "private" badge.
+- If Ollama is down, the briefing falls back to plain previews and says so.
 
 ## Setup on the Mac mini
 

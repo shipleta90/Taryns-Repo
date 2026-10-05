@@ -25,7 +25,7 @@ function askToken() {
 }
 $("loginForm").addEventListener("submit", () => {
   store.set("token", $("tokenInput").value.trim());
-  setTimeout(refresh, 0);
+  setTimeout(() => { refresh(); loadBriefing(); }, 0);
 });
 
 function ago(ts) {
@@ -101,11 +101,74 @@ $("actions").addEventListener("click", async (ev) => {
   refresh();
 });
 
+// ---- Briefing -----------------------------------------------------------------------------
+let pollTimer = null;
+
+function itemHtml(i) {
+  return `<li>
+    <div class="subject">${esc(i.subject)}</div>
+    <div class="meta">${esc(i.sender)}${i.sensitive ? '<span class="badge">private</span>' : ""}</div>
+    <div class="summary-line">${esc(i.summary)}</div>
+  </li>`;
+}
+
+function renderBriefing(res) {
+  const b = res.briefing;
+  const items = b ? b.items : [];
+  const reply = items.filter((i) => i.needs_reply);
+  const other = items.filter((i) => !i.needs_reply);
+  $("bsummary").innerHTML = res.running
+    ? "Writing your briefing on the Mac mini… this can take a couple of minutes."
+    : b
+      ? `Briefing from <strong>${ago(b.created_at)}</strong> · <strong>${items.length}</strong> messages · <strong>${reply.length}</strong> need a reply`
+      : "No briefing yet. Tap Refresh briefing.";
+  const note = res.error ? "Last attempt failed: " + res.error : (b && b.note) || "";
+  $("bnote").hidden = !note;
+  $("bnote").textContent = note;
+  $("brefresh").disabled = !!res.running;
+  const empty = (t) => `<li class="empty">${t}</li>`;
+  $("breply").innerHTML = reply.length ? reply.map(itemHtml).join("") : empty(b ? "Nothing waiting on you." : "—");
+  $("bother").innerHTML = other.length ? other.map(itemHtml).join("") : empty(b ? "Nothing else." : "—");
+}
+
+async function loadBriefing() {
+  try {
+    const res = await api("/api/briefing");
+    store.set("bcache", JSON.stringify(res));
+    renderBriefing(res);
+    clearTimeout(pollTimer);
+    if (res.running) pollTimer = setTimeout(loadBriefing, 4000);
+  } catch (e) {
+    if (e.message !== "unauthorized") $("bsummary").textContent = "Can't reach your Mac mini. Is Tailscale on?";
+  }
+}
+
+$("brefresh").addEventListener("click", async () => {
+  $("brefresh").disabled = true;
+  try { await api("/api/briefing/run", { method: "POST" }); } catch (e) { alert(e.message); }
+  loadBriefing();
+});
+
+function showTab(name) {
+  $("view-briefing").hidden = name !== "briefing";
+  $("view-inbox").hidden = name !== "inbox";
+  $("title").textContent = name === "briefing" ? "Briefing" : "Inbox";
+  document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === name));
+  store.set("tab", name);
+}
+document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => showTab(t.dataset.tab)));
+
 // 1) paint from cache instantly, 2) refresh from the server.
 try {
   const c = JSON.parse(store.get("cache") || "null");
   if (c) { renderStatus(c.st); renderActions(c.rows); }
 } catch { /* ignore bad cache */ }
+try {
+  const bc = JSON.parse(store.get("bcache") || "null");
+  if (bc) renderBriefing(bc);
+} catch { /* ignore bad cache */ }
+showTab(store.get("tab") === "inbox" ? "inbox" : "briefing");
 if (!store.get("token")) askToken();
 refresh();
+loadBriefing();
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});

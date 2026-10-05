@@ -20,6 +20,7 @@ SCOPES = [
 
 class GmailClient(Protocol):
     def list_new_messages(self, lookback_days: int) -> list[Message]: ...
+    def recent_messages(self, lookback_days: int, limit: int) -> list[Message]: ...
     def build_engaged_set(self) -> EngagedSet: ...
     def trash(self, message_id: str) -> None: ...
     def untrash(self, message_id: str) -> None: ...
@@ -74,27 +75,32 @@ class GoogleGmail:
                 return h["value"]
         return ""
 
+    def _to_message(self, ref_id: str) -> Message:
+        m = self._metadata(ref_id, ["From", "Subject", "List-Unsubscribe"])
+        thread = self.svc.users().threads().get(
+            userId="me", id=m["threadId"], format="minimal"
+        ).execute()
+        replied = any("SENT" in t.get("labelIds", []) for t in thread.get("messages", []))
+        return Message(
+            id=m["id"],
+            thread_id=m["threadId"],
+            sender=self._header(m, "From"),
+            subject=self._header(m, "Subject"),
+            snippet=m.get("snippet", ""),
+            labels=frozenset(m.get("labelIds", [])),
+            has_list_unsubscribe=bool(self._header(m, "List-Unsubscribe")),
+            thread_has_user_reply=replied,
+        )
+
     def list_new_messages(self, lookback_days: int) -> list[Message]:
         # Only unseen inbox mail within the lookback window: future-forward, no backlog sweep.
         query = f'in:inbox newer_than:{lookback_days}d -label:"{SEEN_LABEL}"'
-        out: list[Message] = []
-        for ref in self._ids(query, limit=200):
-            m = self._metadata(ref["id"], ["From", "Subject", "List-Unsubscribe"])
-            thread = self.svc.users().threads().get(
-                userId="me", id=m["threadId"], format="minimal"
-            ).execute()
-            replied = any("SENT" in t.get("labelIds", []) for t in thread.get("messages", []))
-            out.append(Message(
-                id=m["id"],
-                thread_id=m["threadId"],
-                sender=self._header(m, "From"),
-                subject=self._header(m, "Subject"),
-                snippet=m.get("snippet", ""),
-                labels=frozenset(m.get("labelIds", [])),
-                has_list_unsubscribe=bool(self._header(m, "List-Unsubscribe")),
-                thread_has_user_reply=replied,
-            ))
-        return out
+        return [self._to_message(ref["id"]) for ref in self._ids(query, limit=200)]
+
+    def recent_messages(self, lookback_days: int, limit: int) -> list[Message]:
+        """Recent inbox mail (seen or not) for the briefing. Read-only."""
+        query = f"in:inbox newer_than:{lookback_days}d"
+        return [self._to_message(ref["id"]) for ref in self._ids(query, limit=limit)]
 
     def build_engaged_set(self) -> EngagedSet:
         """Domains/addresses you have written to, or starred mail from."""

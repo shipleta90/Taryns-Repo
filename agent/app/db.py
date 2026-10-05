@@ -1,4 +1,5 @@
 """SQLite state: engaged domains, the action log (for undo), and run history."""
+import json
 import sqlite3
 import time
 from pathlib import Path
@@ -30,6 +31,13 @@ CREATE TABLE IF NOT EXISTS actions (
     created_at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS actions_run ON actions(run_id);
+CREATE TABLE IF NOT EXISTS briefings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at REAL NOT NULL,
+    model TEXT NOT NULL,
+    items_json TEXT NOT NULL,
+    note TEXT
+);
 CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     started_at REAL NOT NULL,
@@ -123,3 +131,20 @@ class Database:
     def mark_undone(self, action_id: int) -> None:
         with self.conn:
             self.conn.execute("UPDATE actions SET undone=1 WHERE id=?", (action_id,))
+
+    # briefings
+    def save_briefing(self, model: str, items: list[dict], note: str | None = None) -> int:
+        with self.conn:
+            cur = self.conn.execute(
+                "INSERT INTO briefings(created_at, model, items_json, note) VALUES (?,?,?,?)",
+                (time.time(), model, json.dumps(items), note),
+            )
+        return int(cur.lastrowid)
+
+    def latest_briefing(self) -> dict | None:
+        row = self.conn.execute("SELECT * FROM briefings ORDER BY id DESC LIMIT 1").fetchone()
+        if not row:
+            return None
+        out = dict(row)
+        out["items"] = json.loads(out.pop("items_json"))
+        return out
