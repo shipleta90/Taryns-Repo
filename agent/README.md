@@ -31,6 +31,9 @@ engaged per exact address, never per domain.
 
 ## Setup on the Mac mini
 
+**Requires Python 3.10 or newer.** macOS ships 3.9, which won't work; install 3.12 from python.org first and
+create the venv with `python3.12 -m venv .venv`.
+
 ```bash
 cd Taryns-Repo/agent
 python3 -m venv .venv && source .venv/bin/activate
