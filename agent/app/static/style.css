@@ -47,3 +47,12 @@ dialog input { width: 100%; font-size: 16px; padding: 12px; margin: 8px 0 12px; 
 [hidden] { display: none !important; }
 .list li .summary-line { font-size: 15px; }
 .badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #fef3c7; color: var(--warn); margin-left: 6px; }
+
+.overview { margin: 0 0 10px; font-size: 17px; line-height: 1.45; }
+.todo-item { grid-template-columns: 1fr; }
+.todo-action { font-weight: 600; }
+.due { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #dbeafe; color: var(--accent); margin-left: 6px; }
+.digest li { padding: 10px 16px; }
+.digest .who { color: var(--muted); font-size: 13px; }
+details.more { margin-top: 24px; }
+details.more summary { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 4px 8px; cursor: pointer; }

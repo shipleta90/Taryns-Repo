@@ -30,14 +30,19 @@ engaged per exact address, never per domain.
 
 ## Morning briefing
 
-Every morning (`BRIEFING_AT`, default 06:30) and on demand from the app, the agent summarizes the last day of
-mail with a **local model on the Mini** ([Ollama](https://ollama.com)) and lists what needs a reply.
+Every morning (`BRIEFING_AT`, default 06:30) and on demand from the app, a **local model on the Mini**
+([Ollama](https://ollama.com)) reads the last day of mail and writes a short briefing: a few sentences on what
+matters today, a **To do** list (actions and dates pulled from the emails), and a digest grouped by topic, with
+orders/newsletters folded away.
 
 - Needs Ollama running locally and a model pulled; set `OLLAMA_MODEL` in `.env` to the exact name from `ollama list`.
 - `OLLAMA_URL` must point at this machine; the app refuses anything else, so mail text can't leave by accident.
-- Each message is summarized in its own isolated call, wrapped as untrusted data, and the model has no tools,
-  so a malicious email can at worst produce a misleading summary. It cannot send, delete or label anything.
-- Summaries use Gmail's short preview text, not full bodies (v1). Health/legal/financial items get a "private" badge.
+- Two passes: each email is read in its own isolated call (wrapped as untrusted data) to pull out a gist,
+  category, action and date; then one call writes the overview from those short notes, never the raw emails.
+  The model has no tools, so a malicious email can at worst produce a misleading line. It cannot send,
+  delete or label anything. Grouping and the to-do list are done in code, not by the model.
+- Reads the plain-text body (quoted replies and links stripped, first ~2000 characters).
+  Health/legal/financial items get a "private" badge.
 - If Ollama is down, the briefing falls back to plain previews and says so.
 
 ## Setup on the Mac mini

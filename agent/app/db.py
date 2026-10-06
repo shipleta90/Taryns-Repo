@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS briefings (
     created_at REAL NOT NULL,
     model TEXT NOT NULL,
     items_json TEXT NOT NULL,
-    note TEXT
+    note TEXT,
+    overview TEXT
 );
 CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,6 +56,13 @@ class Database:
         self.conn = sqlite3.connect(str(path), check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        self._migrate()
+
+    def _migrate(self) -> None:
+        cols = {r["name"] for r in self.conn.execute("PRAGMA table_info(briefings)")}
+        if "overview" not in cols:  # databases created before the overview existed
+            with self.conn:
+                self.conn.execute("ALTER TABLE briefings ADD COLUMN overview TEXT")
 
     # engaged senders (refreshed weekly; timestamp lives in meta so an empty set still counts)
     def replace_engaged(self, domains: Iterable[str], addresses: Iterable[str]) -> None:
@@ -133,11 +141,12 @@ class Database:
             self.conn.execute("UPDATE actions SET undone=1 WHERE id=?", (action_id,))
 
     # briefings
-    def save_briefing(self, model: str, items: list[dict], note: str | None = None) -> int:
+    def save_briefing(self, model: str, items: list[dict], note: str | None = None,
+                      overview: str | None = None) -> int:
         with self.conn:
             cur = self.conn.execute(
-                "INSERT INTO briefings(created_at, model, items_json, note) VALUES (?,?,?,?)",
-                (time.time(), model, json.dumps(items), note),
+                "INSERT INTO briefings(created_at, model, items_json, note, overview) VALUES (?,?,?,?,?)",
+                (time.time(), model, json.dumps(items), note, overview),
             )
         return int(cur.lastrowid)
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from .domains import engagement_domain, parse_addresses
+from .mailtext import extract_text
 from .triage import EngagedSet, Message
 
 SEEN_LABEL = "Agent/Seen"
@@ -21,6 +22,7 @@ SCOPES = [
 class GmailClient(Protocol):
     def list_new_messages(self, lookback_days: int) -> list[Message]: ...
     def recent_messages(self, lookback_days: int, limit: int) -> list[Message]: ...
+    def message_text(self, message_id: str) -> str: ...
     def build_engaged_set(self) -> EngagedSet: ...
     def trash(self, message_id: str) -> None: ...
     def untrash(self, message_id: str) -> None: ...
@@ -101,6 +103,11 @@ class GoogleGmail:
         """Recent inbox mail (seen or not) for the briefing. Read-only."""
         query = f"in:inbox newer_than:{lookback_days}d"
         return [self._to_message(ref["id"]) for ref in self._ids(query, limit=limit)]
+
+    def message_text(self, message_id: str) -> str:
+        """Plain-text body (quoted replies and links stripped, truncated). Read-only."""
+        m = self.svc.users().messages().get(userId="me", id=message_id, format="full").execute()
+        return extract_text(m.get("payload", {}))
 
     def build_engaged_set(self) -> EngagedSet:
         """Domains/addresses you have written to, or starred mail from."""
