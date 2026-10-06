@@ -18,6 +18,8 @@ SCOPES = [
     "https://www.googleapis.com/auth/gmail.modify",
     # Read and create events on your calendars (added for the chat assistant).
     "https://www.googleapis.com/auth/calendar.events",
+    # See which calendars you have (family, shared, school...) so all of them are read.
+    "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
 ]
 
 
