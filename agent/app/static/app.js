@@ -104,31 +104,61 @@ $("actions").addEventListener("click", async (ev) => {
 // ---- Briefing -----------------------------------------------------------------------------
 let pollTimer = null;
 
-function itemHtml(i) {
+const CATEGORY_ORDER = ["Family & kids", "School", "Health", "Legal & money", "Work & jobs",
+  "Events & plans", "Orders & deliveries", "News & reading", "Other"];
+const LOW_PRIORITY = new Set(["Orders & deliveries", "News & reading", "Other"]);
+const privateBadge = (i) => (i.sensitive ? '<span class="badge">private</span>' : "");
+const dueBadge = (i) => (i.due ? `<span class="due">${esc(i.due)}</span>` : "");
+
+function digestHtml(i) {
   return `<li>
-    <div class="subject">${esc(i.subject)}</div>
-    <div class="meta">${esc(i.sender)}${i.sensitive ? '<span class="badge">private</span>' : ""}</div>
     <div class="summary-line">${esc(i.summary)}</div>
+    <div class="who">${esc(i.sender)}${dueBadge(i)}${privateBadge(i)}</div>
   </li>`;
+}
+
+function sectionHtml(title, rows) {
+  return `<h2>${esc(title)}</h2><ul class="list digest">${rows.map(digestHtml).join("")}</ul>`;
 }
 
 function renderBriefing(res) {
   const b = res.briefing;
   const items = b ? b.items : [];
-  const reply = items.filter((i) => i.needs_reply);
-  const other = items.filter((i) => !i.needs_reply);
-  $("bsummary").innerHTML = res.running
-    ? "Writing your briefing on the Mac mini… this can take a couple of minutes."
+  const todos = items.filter((i) => i.action || i.needs_reply);
+
+  $("overview").textContent = res.running
+    ? "Writing your briefing on the Mac mini… this can take a few minutes."
     : b
-      ? `Briefing from <strong>${ago(b.created_at)}</strong> · <strong>${items.length}</strong> messages · <strong>${reply.length}</strong> need a reply`
+      ? b.overview || (items.length ? `${items.length} new messages, ${todos.length} need something from you.` : "Nothing new since your last briefing.")
       : "No briefing yet. Tap Refresh briefing.";
+  $("bsummary").innerHTML = b && !res.running
+    ? `From ${ago(b.created_at)} · ${items.length} messages · ${todos.length} to do`
+    : "";
   const note = res.error ? "Last attempt failed: " + res.error : (b && b.note) || "";
   $("bnote").hidden = !note;
   $("bnote").textContent = note;
   $("brefresh").disabled = !!res.running;
-  const empty = (t) => `<li class="empty">${t}</li>`;
-  $("breply").innerHTML = reply.length ? reply.map(itemHtml).join("") : empty(b ? "Nothing waiting on you." : "—");
-  $("bother").innerHTML = other.length ? other.map(itemHtml).join("") : empty(b ? "Nothing else." : "—");
+
+  $("todo-wrap").hidden = !todos.length;
+  $("todo").innerHTML = todos.map((i) => `<li class="todo-item">
+      <div class="todo-action">${esc(i.action || "Reply to " + i.sender)}${dueBadge(i)}${privateBadge(i)}</div>
+      <div class="meta">${esc(i.sender)} · ${esc(i.subject)}</div>
+    </li>`).join("");
+
+  const groups = new Map();
+  for (const i of items) {
+    const c = CATEGORY_ORDER.includes(i.category) ? i.category : "Other";
+    if (!groups.has(c)) groups.set(c, []);
+    groups.get(c).push(i);
+  }
+  const main = [], low = [];
+  for (const c of CATEGORY_ORDER) {
+    if (!groups.has(c)) continue;
+    (LOW_PRIORITY.has(c) ? low : main).push(sectionHtml(c, groups.get(c)));
+  }
+  const lowCount = items.filter((i) => LOW_PRIORITY.has(CATEGORY_ORDER.includes(i.category) ? i.category : "Other")).length;
+  $("sections").innerHTML = main.join("") +
+    (low.length ? `<details class="more"><summary>Also in your inbox (${lowCount})</summary>${low.join("")}</details>` : "");
 }
 
 async function loadBriefing() {
@@ -139,7 +169,7 @@ async function loadBriefing() {
     clearTimeout(pollTimer);
     if (res.running) pollTimer = setTimeout(loadBriefing, 4000);
   } catch (e) {
-    if (e.message !== "unauthorized") $("bsummary").textContent = "Can't reach your Mac mini. Is Tailscale on?";
+    if (e.message !== "unauthorized") $("overview").textContent = "Can't reach your Mac mini. Is Tailscale on?";
   }
 }
 

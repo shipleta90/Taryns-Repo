@@ -25,14 +25,16 @@
 
   <main id="view-briefing">
     <section class="card">
-      <div id="bsummary" class="summary">Loading…</div>
+      <p id="overview" class="overview">Loading…</p>
+      <div id="bsummary" class="summary"></div>
       <div class="row"><button id="brefresh" class="secondary">Refresh briefing</button></div>
       <p id="bnote" class="notice" hidden></p>
     </section>
-    <h2>Needs a reply</h2>
-    <ul id="breply" class="list"></ul>
-    <h2>Everything else</h2>
-    <ul id="bother" class="list"></ul>
+    <div id="todo-wrap" hidden>
+      <h2>To do</h2>
+      <ul id="todo" class="list"></ul>
+    </div>
+    <div id="sections"></div>
   </main>
 
   <main id="view-inbox" hidden>

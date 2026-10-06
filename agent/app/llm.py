@@ -32,7 +32,8 @@ class LocalLLM:
                 "model": self.model,
                 "stream": False,
                 "format": "json",
-                "options": {"temperature": 0.1},
+                # Ollama's default context is small; the overview call sends ~25 notes at once.
+                "options": {"temperature": 0.1, "num_ctx": 8192},
                 "messages": [{"role": "system", "content": system},
                              {"role": "user", "content": user}],
             })
