@@ -66,3 +66,32 @@ def test_briefing_endpoints(client):
             break
         time.sleep(0.05)
     assert res["briefing"] is not None and res["error"] is None
+
+
+def test_chat_without_api_key_explains_setup(tmp_path, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr("app.secrets.anthropic_key", lambda: None)
+    s = Settings(token="secret", dry_run=True, max_trash_per_run=1, lookback_days=1, triage_at="",
+                 data_dir=tmp_path, briefing_at="")
+    with TestClient(create_app(s, gmail=FakeGmail([]), llm=FakeLLM())) as c:
+        assert "set-anthropic-key" in c.get("/api/chat", headers=AUTH).json()["setup"]
+        assert c.post("/api/chat", json={"text": "hi"}, headers=AUTH).status_code == 409
+
+
+def test_chat_and_approval_endpoints(tmp_path):
+    from tests.test_assistant import FakeCal, FakeClaude, FakeMail, text, tool
+    s = Settings(token="secret", dry_run=True, max_trash_per_run=1, lookback_days=1, triage_at="",
+                 data_dir=tmp_path, briefing_at="")
+    mail = FakeMail()
+    claude = FakeClaude([tool("propose_email", {"to": ["a@b.com"], "subject": "s", "body": "b",
+                                                "reply_to_message_id": ""}), text("Waiting for your approval.")])
+    with TestClient(create_app(s, gmail=mail, llm=FakeLLM(), calendar=FakeCal(), claude=claude)) as c:
+        assert c.post("/api/chat", json={"text": "hi"}).status_code == 401
+        r = c.post("/api/chat", json={"text": "email a"}, headers=AUTH).json()
+        assert r["reply"] == "Waiting for your approval."
+        card = [i for i in r["items"] if i["type"] == "proposal"][0]
+        assert card["status"] == "pending" and mail.sent == []
+        assert c.post(f"/api/proposals/{card['id']}/approve", json={"mode": "send"}, headers=AUTH).status_code == 200
+        assert c.post(f"/api/proposals/{card['id']}/approve", json={"mode": "send"}, headers=AUTH).status_code == 409
+        assert len(mail.sent) == 1
+        assert c.post("/api/proposals/999/reject", headers=AUTH).status_code == 404

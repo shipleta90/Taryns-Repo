@@ -16,6 +16,8 @@ SEEN_LABEL = "Agent/Seen"
 TRASHED_LABEL = "Agent/Trashed"
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.modify",
+    # Read and create events on your calendars (added for the chat assistant).
+    "https://www.googleapis.com/auth/calendar.events",
 ]
 
 
@@ -23,6 +25,10 @@ class GmailClient(Protocol):
     def list_new_messages(self, lookback_days: int) -> list[Message]: ...
     def recent_messages(self, lookback_days: int, limit: int) -> list[Message]: ...
     def message_text(self, message_id: str) -> str: ...
+    def search(self, query: str, limit: int) -> list[dict]: ...
+    def read(self, message_id: str) -> dict: ...
+    def send(self, to: list[str], subject: str, body: str, reply_to_id: str = "") -> str: ...
+    def save_draft(self, to: list[str], subject: str, body: str, reply_to_id: str = "") -> str: ...
     def build_engaged_set(self) -> EngagedSet: ...
     def trash(self, message_id: str) -> None: ...
     def untrash(self, message_id: str) -> None: ...
@@ -108,6 +114,55 @@ class GoogleGmail:
         """Plain-text body (quoted replies and links stripped, truncated). Read-only."""
         m = self.svc.users().messages().get(userId="me", id=message_id, format="full").execute()
         return extract_text(m.get("payload", {}))
+
+    # --- chat assistant -------------------------------------------------------------------
+    def search(self, query: str, limit: int) -> list[dict]:
+        out = []
+        for ref in self._ids(query, limit=limit):
+            m = self._metadata(ref["id"], ["From", "To", "Subject", "Date"])
+            out.append({
+                "id": m["id"], "from": self._header(m, "From"), "to": self._header(m, "To"),
+                "subject": self._header(m, "Subject"), "date": self._header(m, "Date"),
+                "snippet": m.get("snippet", ""),
+            })
+        return out
+
+    def read(self, message_id: str) -> dict:
+        m = self.svc.users().messages().get(userId="me", id=message_id, format="full").execute()
+        return {
+            "id": m["id"], "from": self._header(m, "From"), "to": self._header(m, "To"),
+            "cc": self._header(m, "Cc"), "subject": self._header(m, "Subject"),
+            "date": self._header(m, "Date"), "body": extract_text(m.get("payload", {}), limit=4000),
+        }
+
+    def _mime(self, to: list[str], subject: str, body: str, reply_to_id: str) -> dict:
+        import base64
+        from email.message import EmailMessage
+
+        msg = EmailMessage()
+        msg["To"] = ", ".join(to)
+        msg["Subject"] = subject
+        msg.set_content(body)
+        out: dict = {}
+        if reply_to_id:
+            orig = self._metadata(reply_to_id, ["Message-ID", "References"])
+            mid = self._header(orig, "Message-ID")
+            if mid:
+                msg["In-Reply-To"] = mid
+                msg["References"] = (self._header(orig, "References") + " " + mid).strip()
+            out["threadId"] = orig["threadId"]
+        out["raw"] = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+        return out
+
+    def send(self, to, subject, body, reply_to_id="") -> str:
+        sent = self.svc.users().messages().send(
+            userId="me", body=self._mime(to, subject, body, reply_to_id)).execute()
+        return sent["id"]
+
+    def save_draft(self, to, subject, body, reply_to_id="") -> str:
+        draft = self.svc.users().drafts().create(
+            userId="me", body={"message": self._mime(to, subject, body, reply_to_id)}).execute()
+        return draft["id"]
 
     def build_engaged_set(self) -> EngagedSet:
         """Domains/addresses you have written to, or starred mail from."""

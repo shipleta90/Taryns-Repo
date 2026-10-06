@@ -16,11 +16,22 @@ SERVICE = "personal-agent"
 ACCOUNT = "google-oauth-token"
 
 
-def load_credentials() -> Credentials:
+GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.modify"
+CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events"
+
+
+def load_credentials(require: str = GMAIL_SCOPE) -> Credentials:
     raw = keyring.get_password(SERVICE, ACCOUNT)
     if not raw:
         raise RuntimeError("Not signed in to Google. Run: python -m app.auth_google")
-    creds = Credentials.from_authorized_user_info(json.loads(raw), SCOPES)
+    info = json.loads(raw)
+    if require not in (info.get("scopes") or []):
+        # Older sign-ins predate Calendar access; triage keeps working, chat asks for a re-sign-in.
+        raise RuntimeError(
+            "Google sign-in is missing a permission this needs. Run on the Mac mini: "
+            "python -m app.auth_google"
+        )
+    creds = Credentials.from_authorized_user_info(info)  # use exactly the scopes that were granted
     if creds.expired and creds.refresh_token:
         creds.refresh(Request())
         keyring.set_password(SERVICE, ACCOUNT, creds.to_json())

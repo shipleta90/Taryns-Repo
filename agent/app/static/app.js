@@ -179,10 +179,115 @@ $("brefresh").addEventListener("click", async () => {
   loadBriefing();
 });
 
+// ---- Chat ---------------------------------------------------------------------------------
+let chatBusy = false;
+
+function fmtWhen(iso) {
+  const d = new Date(iso);
+  return d.toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function proposalHtml(p) {
+  const pl = p.payload;
+  let body, buttons;
+  if (p.kind === "email") {
+    body = `<div class="kind">Email${pl.reply_to_message_id ? " reply" : ""}</div>
+      <div class="field">To <strong>${esc(pl.to.join(", "))}</strong></div>
+      <div class="field">Subject <strong>${esc(pl.subject)}</strong></div>
+      <div class="body">${esc(pl.body)}</div>
+      ${pl.new_recipients && pl.new_recipients.length ? `<div class="warn">You've never emailed ${esc(pl.new_recipients.join(", "))}. Check the address.</div>` : ""}`;
+    buttons = `<button class="act" data-id="${p.id}" data-mode="send">Send</button>
+      <button class="act secondary" data-id="${p.id}" data-mode="draft">Save draft</button>
+      <button class="rej secondary" data-id="${p.id}">Don't send</button>`;
+  } else {
+    body = `<div class="kind">Calendar event</div>
+      <div class="field"><strong>${esc(pl.title)}</strong></div>
+      <div class="field">${esc(pl.when || fmtWhen(pl.start) + " – " + fmtWhen(pl.end))}</div>
+      ${pl.location ? `<div class="field">${esc(pl.location)}</div>` : ""}
+      ${pl.attendees && pl.attendees.length ? `<div class="warn">Invites will be emailed to ${esc(pl.attendees.join(", "))}</div>` : ""}
+      ${pl.description ? `<div class="body">${esc(pl.description)}</div>` : ""}`;
+    buttons = `<button class="act" data-id="${p.id}" data-mode="send">Add to calendar</button>
+      <button class="rej secondary" data-id="${p.id}">Skip</button>`;
+  }
+  const states = { done: "Done", rejected: "Skipped", failed: "Failed", working: "Working…" };
+  const footer = p.status === "pending"
+    ? `<div class="row">${buttons}</div>`
+    : `<div class="state ${esc(p.status)}">${states[p.status] || esc(p.status)}${p.result ? " · " + esc(p.result) : ""}</div>`;
+  return `<div class="proposal">${body}${footer}</div>`;
+}
+
+function renderChat(data, typing) {
+  const setup = data.setup || "";
+  $("chat-setup").hidden = !setup;
+  $("chat-setup").textContent = setup;
+  const items = data.items || [];
+  let html = items.map((i) =>
+    i.type === "proposal" ? proposalHtml(i) : `<div class="bubble ${i.type}">${esc(i.text)}</div>`).join("");
+  if (typing) html += `<div class="bubble user">${esc(typing)}</div><div class="bubble assistant typing">Thinking…</div>`;
+  if (!html) html = '<div class="chat-empty">Try “What’s on my calendar tomorrow?” or “Find the email about Sunday’s game and add it to my calendar.”</div>';
+  $("chat-log").innerHTML = html;
+  window.scrollTo(0, document.body.scrollHeight);
+}
+
+let chatCache = { items: [] };
+async function loadChat() {
+  try {
+    chatCache = await api("/api/chat");
+    renderChat(chatCache);
+  } catch (e) { /* shown elsewhere */ }
+}
+
+async function sendChat(text) {
+  if (chatBusy || !text.trim()) return;
+  chatBusy = true;
+  $("chat-send").disabled = true;
+  renderChat(chatCache, text);
+  try {
+    chatCache = await api("/api/chat", { method: "POST", body: JSON.stringify({ text }) });
+    if (chatCache.blocked) alert(chatCache.reply);
+    renderChat(chatCache);
+  } catch (e) {
+    renderChat(chatCache);
+    $("chat-input").value = text;   // don't lose what you typed
+    alert(e.message);
+  } finally {
+    chatBusy = false;
+    $("chat-send").disabled = false;
+  }
+}
+
+$("composer").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  const text = $("chat-input").value;
+  $("chat-input").value = "";
+  $("chat-input").style.height = "";
+  sendChat(text);
+});
+$("chat-input").addEventListener("input", (ev) => {
+  ev.target.style.height = "auto";
+  ev.target.style.height = Math.min(ev.target.scrollHeight, 140) + "px";
+});
+$("newchat").addEventListener("click", async () => {
+  try { chatCache = await api("/api/chat/new", { method: "POST" }); renderChat(chatCache); } catch (e) { alert(e.message); }
+});
+$("chat-log").addEventListener("click", async (ev) => {
+  const btn = ev.target.closest("button.act, button.rej");
+  if (!btn) return;
+  btn.closest(".row").querySelectorAll("button").forEach((b) => (b.disabled = true));
+  const id = btn.dataset.id;
+  try {
+    if (btn.classList.contains("rej")) await api(`/api/proposals/${id}/reject`, { method: "POST" });
+    else await api(`/api/proposals/${id}/approve`, { method: "POST", body: JSON.stringify({ mode: btn.dataset.mode }) });
+  } catch (e) { alert(e.message); }
+  loadChat();
+});
+
 function showTab(name) {
+  $("view-chat").hidden = name !== "chat";
   $("view-briefing").hidden = name !== "briefing";
   $("view-inbox").hidden = name !== "inbox";
-  $("title").textContent = name === "briefing" ? "Briefing" : "Inbox";
+  $("title").textContent = { chat: "Chat", briefing: "Briefing", inbox: "Inbox" }[name];
+  if (name === "chat") loadChat();
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === name));
   store.set("tab", name);
 }
@@ -197,7 +302,8 @@ try {
   const bc = JSON.parse(store.get("bcache") || "null");
   if (bc) renderBriefing(bc);
 } catch { /* ignore bad cache */ }
-showTab(store.get("tab") === "inbox" ? "inbox" : "briefing");
+const savedTab = store.get("tab");
+showTab(["chat", "briefing", "inbox"].includes(savedTab) ? savedTab : "chat");
 if (!store.get("token")) askToken();
 refresh();
 loadBriefing();

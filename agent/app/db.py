@@ -39,6 +39,26 @@ CREATE TABLE IF NOT EXISTS briefings (
     note TEXT,
     overview TEXT
 );
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id INTEGER NOT NULL,
+    role TEXT NOT NULL,              -- user | assistant (API roles; tool results are role=user)
+    content_json TEXT NOT NULL,      -- exactly what is sent to / returned by the API (append-only)
+    display_text TEXT,               -- what the person typed, for the chat screen
+    created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS chat_conv ON chat_messages(conversation_id, id);
+CREATE TABLE IF NOT EXISTS proposals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id INTEGER NOT NULL,
+    chat_message_id INTEGER NOT NULL,  -- assistant message that proposed it
+    kind TEXT NOT NULL,                -- email | event
+    payload_json TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',  -- pending | done | rejected | failed
+    result TEXT,
+    noted INTEGER NOT NULL DEFAULT 0,  -- outcome already reported back to the model
+    created_at REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     started_at REAL NOT NULL,
@@ -157,3 +177,78 @@ class Database:
         out = dict(row)
         out["items"] = json.loads(out.pop("items_json"))
         return out
+
+    # small key/value settings
+    def set_meta(self, key: str, value: float) -> None:
+        with self.conn:
+            self.conn.execute("INSERT INTO meta(key, value) VALUES (?, ?)"
+                              " ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
+
+    def get_meta(self, key: str) -> float | None:
+        row = self.conn.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+        return None if row is None else float(row["value"])
+
+    # chat (append-only: rows are never edited or deleted, see assistant.py)
+    def add_chat(self, conversation_id: int, role: str, content: list, display_text: str | None = None) -> int:
+        with self.conn:
+            cur = self.conn.execute(
+                "INSERT INTO chat_messages(conversation_id, role, content_json, display_text, created_at)"
+                " VALUES (?,?,?,?,?)",
+                (conversation_id, role, json.dumps(content), display_text, time.time()),
+            )
+        return int(cur.lastrowid)
+
+    def chat_history(self, conversation_id: int) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM chat_messages WHERE conversation_id=? ORDER BY id", (conversation_id,))
+        return [dict(r, content=json.loads(r["content_json"])) for r in rows]
+
+    def latest_conversation(self) -> tuple[int, float] | None:
+        row = self.conn.execute(
+            "SELECT conversation_id, MAX(created_at) AS t FROM chat_messages "
+            "GROUP BY conversation_id ORDER BY conversation_id DESC LIMIT 1").fetchone()
+        return (int(row["conversation_id"]), float(row["t"])) if row else None
+
+    def new_conversation_id(self) -> int:
+        row = self.conn.execute("SELECT MAX(conversation_id) AS m FROM chat_messages").fetchone()
+        return int(row["m"] or 0) + 1
+
+    def add_proposal(self, conversation_id: int, chat_message_id: int, kind: str, payload: dict) -> int:
+        with self.conn:
+            cur = self.conn.execute(
+                "INSERT INTO proposals(conversation_id, chat_message_id, kind, payload_json, created_at)"
+                " VALUES (?,?,?,?,?)",
+                (conversation_id, chat_message_id, kind, json.dumps(payload), time.time()),
+            )
+        return int(cur.lastrowid)
+
+    def get_proposal(self, proposal_id: int) -> dict | None:
+        row = self.conn.execute("SELECT * FROM proposals WHERE id=?", (proposal_id,)).fetchone()
+        return dict(row, payload=json.loads(row["payload_json"])) if row else None
+
+    def proposals_for(self, conversation_id: int) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM proposals WHERE conversation_id=? ORDER BY id", (conversation_id,))
+        return [dict(r, payload=json.loads(r["payload_json"])) for r in rows]
+
+    def claim_proposal(self, proposal_id: int) -> bool:
+        """Atomically move pending -> working so a double tap can't send twice."""
+        with self.conn:
+            cur = self.conn.execute(
+                "UPDATE proposals SET status='working' WHERE id=? AND status='pending'", (proposal_id,))
+        return cur.rowcount == 1
+
+    def finish_proposal(self, proposal_id: int, status: str, result: str) -> None:
+        with self.conn:
+            self.conn.execute("UPDATE proposals SET status=?, result=? WHERE id=?",
+                              (status, result, proposal_id))
+
+    def unnoted_outcomes(self, conversation_id: int) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM proposals WHERE conversation_id=? AND status IN ('done','rejected','failed')"
+            " AND noted=0 ORDER BY id", (conversation_id,))
+        return [dict(r, payload=json.loads(r["payload_json"])) for r in rows]
+
+    def mark_noted(self, ids: list[int]) -> None:
+        with self.conn:
+            self.conn.executemany("UPDATE proposals SET noted=1 WHERE id=?", [(i,) for i in ids])
