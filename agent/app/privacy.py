@@ -32,7 +32,8 @@ def email_full(m: dict) -> dict:
 
 
 def event(e: dict) -> dict:
-    if safety.assess(f"{e.get('title', '')}\n{e.get('description', '')}\n{e.get('location', '')}").sensitive:
+    text = f"{e.get('title', '')}\n{e.get('description', '')}\n{e.get('location', '')}\n{e.get('calendar', '')}"
+    if safety.assess(text).sensitive:
         return {"id": e["id"], "title": "Private appointment", "start": e["start"], "end": e["end"],
                 "private": True}
     return e
