@@ -14,6 +14,7 @@ from . import service
 from .config import Settings, load_settings
 from .db import Database
 from . import briefing as briefing_mod
+from .assistant import Assistant
 from .llm import LocalLLM
 from .scheduler import daily
 
@@ -25,8 +26,16 @@ class TriageRequest(BaseModel):
     dry_run: bool = True
 
 
+class ChatRequest(BaseModel):
+    text: str
+
+
+class ApproveRequest(BaseModel):
+    mode: str = "send"   # send | draft (emails only)
+
+
 def create_app(settings: Settings | None = None, gmail=None, db: Database | None = None,
-               llm: LocalLLM | None = None) -> FastAPI:
+               llm: LocalLLM | None = None, calendar=None, claude=None) -> FastAPI:
     settings = settings or load_settings()
     db = db or Database(settings.db_path)
     if not settings.token:
@@ -46,6 +55,28 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
             raise HTTPException(status_code=401, detail="unauthorized")
 
     llm = llm or LocalLLM(settings.ollama_url, settings.ollama_model)
+
+    def get_calendar():
+        nonlocal calendar
+        if calendar is None:
+            from .auth_google import CALENDAR_SCOPE, load_credentials
+            from .calendar_client import GoogleCalendar
+            calendar = GoogleCalendar(load_credentials(require=CALENDAR_SCOPE), settings.timezone)
+        return calendar
+
+    def get_assistant() -> Assistant:
+        nonlocal claude
+        if claude is None:
+            from .secrets import anthropic_key
+            key = anthropic_key()
+            if not key:
+                raise RuntimeError("No Anthropic API key yet. On the Mac mini run: "
+                                   "python -m app.secrets set-anthropic-key")
+            import anthropic
+            claude = anthropic.Anthropic(api_key=key)
+        return Assistant(claude, db, get_gmail, get_calendar, settings)
+
+    chat_lock = asyncio.Lock()
     triage_lock = asyncio.Lock()
     briefing_state = {"running": False, "error": None}
 
@@ -120,6 +151,55 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
         if not briefing_state["running"]:
             asyncio.create_task(run_briefing())
         return {"started": True}
+
+    @app.get("/api/chat", dependencies=[Depends(require_auth)])
+    def chat_transcript():
+        try:
+            return get_assistant().transcript()
+        except RuntimeError as exc:
+            return {"conversation_id": None, "items": [], "setup": str(exc)}
+
+    @app.post("/api/chat", dependencies=[Depends(require_auth)])
+    async def chat_send(req: ChatRequest):
+        if len(req.text) > 4000:
+            raise HTTPException(status_code=400, detail="message too long")
+        async with chat_lock:   # one turn at a time
+            try:
+                assistant = get_assistant()
+                out = await asyncio.to_thread(assistant.send, req.text)
+            except RuntimeError as exc:
+                raise HTTPException(status_code=409, detail=str(exc))
+            except Exception as exc:
+                log.exception("chat turn failed")
+                raise HTTPException(status_code=502, detail=f"The assistant hit an error: {str(exc)[:200]}")
+        return {**out, **assistant.transcript(out["conversation_id"])}
+
+    @app.post("/api/chat/new", dependencies=[Depends(require_auth)])
+    def chat_new():
+        try:
+            return get_assistant().new_chat()
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+
+    @app.post("/api/proposals/{proposal_id}/approve", dependencies=[Depends(require_auth)])
+    async def proposal_approve(proposal_id: int, req: ApproveRequest):
+        try:
+            return await asyncio.to_thread(get_assistant().approve, proposal_id, req.mode)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="no such proposal")
+        except (ValueError, RuntimeError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Couldn't complete it: {str(exc)[:200]}")
+
+    @app.post("/api/proposals/{proposal_id}/reject", dependencies=[Depends(require_auth)])
+    def proposal_reject(proposal_id: int):
+        try:
+            return get_assistant().reject(proposal_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="no such proposal")
+        except (ValueError, RuntimeError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
 
     @app.get("/")
     def index():

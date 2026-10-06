@@ -56,3 +56,24 @@ dialog input { width: 100%; font-size: 16px; padding: 12px; margin: 8px 0 12px; 
 .digest .who { color: var(--muted); font-size: 13px; }
 details.more { margin-top: 24px; }
 details.more summary { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 4px 8px; cursor: pointer; }
+
+.chat-top { display: flex; justify-content: flex-end; margin: -4px 0 4px; }
+button.link { flex: none; min-height: 32px; background: none; color: var(--accent); font-size: 15px; font-weight: 600; padding: 0 4px; }
+.chat-log { display: flex; flex-direction: column; gap: 10px; padding-bottom: 12px; }
+.bubble { max-width: 85%; padding: 10px 14px; border-radius: 18px; white-space: pre-wrap; word-wrap: break-word; font-size: 16px; }
+.bubble.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 6px; }
+.bubble.assistant { align-self: flex-start; background: var(--card); border: 1px solid var(--line); border-bottom-left-radius: 6px; }
+.bubble.typing { color: var(--muted); font-style: italic; }
+.chat-empty { color: var(--muted); text-align: center; padding: 24px 8px; font-size: 15px; }
+.proposal { align-self: stretch; background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 14px; padding: 12px 14px; display: grid; gap: 6px; }
+.proposal .kind { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.proposal .field { font-size: 14px; color: var(--muted); }
+.proposal .field strong { color: var(--text); font-weight: 600; }
+.proposal .body { font-size: 15px; white-space: pre-wrap; background: var(--bg); border-radius: 10px; padding: 10px; max-height: 260px; overflow: auto; }
+.proposal .warn { font-size: 13px; color: var(--warn); font-weight: 600; }
+.proposal .row button { min-height: 40px; font-size: 15px; }
+.proposal .state { font-size: 14px; font-weight: 600; }
+.proposal .state.done { color: var(--ok); } .proposal .state.rejected { color: var(--muted); } .proposal .state.failed { color: var(--danger); }
+.composer { position: sticky; bottom: 0; display: flex; gap: 8px; align-items: flex-end; padding: 10px 0 calc(env(safe-area-inset-bottom) + 6px); background: var(--bg); }
+.composer textarea { flex: 1; resize: none; font: inherit; font-size: 16px; padding: 10px 14px; border-radius: 20px; border: 1px solid var(--line); background: var(--card); color: var(--text); max-height: 140px; }
+.composer button { flex: none; min-height: 42px; padding: 0 16px; border-radius: 21px; }

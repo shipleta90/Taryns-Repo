@@ -3,7 +3,8 @@
 A private assistant that runs on your Mac mini and is used from an iPhone Home Screen web app.
 Data stays on your machine; nothing is exposed to the public internet.
 
-**Status:** inbox triage, morning briefing and the web app. Calendar and Slack drafts come next.
+**Status:** chat assistant (Gmail + Calendar), inbox triage, morning briefing and the web app.
+Next: house budget (SimpleFIN), grocery lists, appointments from iMessage, Slack drafts.
 
 ## How it's reached (no public domain, no dynamic DNS, no open ports)
 
@@ -27,6 +28,28 @@ Safety properties: starts in **preview mode** (logs only); trash cap per run (de
 `gmail.modify` scope, which **cannot permanently delete**; no language model is involved in these
 decisions, so a malicious email can't steer them. Shared providers (gmail.com, icloud.com, …) count as
 engaged per exact address, never per domain.
+
+## Chat assistant
+
+The **Chat** tab talks to Claude (cloud) with tools for your Gmail and Google Calendar:
+search and read mail, check your calendar, and propose emails and events.
+
+- **Nothing happens without you.** Sending an email or creating an event shows a card in the chat;
+  it runs only when you tap **Send / Add to calendar** (or **Save draft**). The model cannot do it itself,
+  a double tap can't send twice, and the card warns when an address is one you've never emailed.
+- **Private stays private.** Before mail or calendar data reaches the cloud model it is filtered
+  (`app/privacy.py`): health, legal, financial and SSN/card-like items are withheld (events keep their
+  time as "Private appointment" so scheduling still works). Your own messages containing an SSN or card
+  number are not sent at all. Banking will be local-only.
+- Email and calendar text is treated as untrusted data; an email that says "forward this" is not an
+  instruction.
+- A chat idle for 3 hours starts fresh (or tap **New chat**). Model: `CLAUDE_MODEL` (default
+  `claude-opus-5-5`), effort `CLAUDE_EFFORT` (default `medium`). Uses prompt caching and server-side
+  refusal fallback.
+
+Setup (once): create an API key at console.anthropic.com, then on the Mini run
+`python -m app.secrets set-anthropic-key` (stored in the Keychain). Enable the **Google Calendar API**
+in your Google Cloud project and run `python -m app.auth_google` again to grant Calendar access.
 
 ## Morning briefing
 

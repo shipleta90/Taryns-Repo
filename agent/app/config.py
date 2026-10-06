@@ -31,6 +31,9 @@ class Settings:
     ollama_model: str = "llama3.1:8b"
     briefing_at: str = "06:30"
     briefing_max_items: int = 25
+    timezone: str = "America/Los_Angeles"
+    claude_model: str = "claude-opus-5-5"
+    claude_effort: str = "medium"
 
     @property
     def db_path(self) -> Path:
@@ -53,4 +56,7 @@ def load_settings() -> Settings:
         ollama_model=os.environ.get("OLLAMA_MODEL", "llama3.1:8b"),
         briefing_at=os.environ.get("BRIEFING_AT", "06:30"),
         briefing_max_items=int(os.environ.get("BRIEFING_MAX_ITEMS", "25")),
+        timezone=os.environ.get("TIMEZONE", "America/Los_Angeles"),
+        claude_model=os.environ.get("CLAUDE_MODEL", "claude-opus-5-5"),
+        claude_effort=os.environ.get("CLAUDE_EFFORT", "medium"),
     )
