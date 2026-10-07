@@ -82,7 +82,15 @@ def test_gather_newsletters_axios_and_privacy_filter():
     })
     data = morning.gather(lambda: mail, lambda: None)
     assert [n["subject"] for n in data["newsletters"]] == ["Agents"]
-    assert data["axios"].startswith("empty") and data["slack"] == "not connected"
+    assert data["axios"].startswith("empty") and data["slack"].startswith("not connected")
+
+
+def test_slack_falls_back_to_notification_emails():
+    mail = Mail({morning.SLACK_EMAIL_QUERY: [
+        {"id": "s1", "from": "Slack", "subject": "[Slack] Notifications from Women Defining AI",
+         "date": "d", "body": "Ana mentioned you in #events"}]})
+    data = morning.gather(lambda: mail, lambda: None)
+    assert data["slack"]["emails"][0]["body"] == "Ana mentioned you in #events"
 
 
 def test_gather_sources_fail_independently():
