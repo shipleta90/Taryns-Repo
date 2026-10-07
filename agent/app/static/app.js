@@ -25,7 +25,7 @@ function askToken() {
 }
 $("loginForm").addEventListener("submit", () => {
   store.set("token", $("tokenInput").value.trim());
-  setTimeout(() => { refresh(); loadBriefing(); }, 0);
+  setTimeout(refresh, 0);
 });
 
 function ago(ts) {
@@ -99,84 +99,6 @@ $("actions").addEventListener("click", async (ev) => {
   btn.disabled = true;
   try { await api(`/api/actions/${btn.dataset.id}/undo`, { method: "POST" }); } catch (e) { alert(e.message); }
   refresh();
-});
-
-// ---- Briefing -----------------------------------------------------------------------------
-let pollTimer = null;
-
-const CATEGORY_ORDER = ["Family & kids", "School", "Health", "Legal & money", "Work & jobs",
-  "Events & plans", "Orders & deliveries", "News & reading", "Other"];
-const LOW_PRIORITY = new Set(["Orders & deliveries", "News & reading", "Other"]);
-const privateBadge = (i) => (i.sensitive ? '<span class="badge">private</span>' : "");
-const dueBadge = (i) => (i.due ? `<span class="due">${esc(i.due)}</span>` : "");
-
-function digestHtml(i) {
-  return `<li>
-    <div class="summary-line">${esc(i.summary)}</div>
-    <div class="who">${esc(i.sender)}${dueBadge(i)}${privateBadge(i)}</div>
-  </li>`;
-}
-
-function sectionHtml(title, rows) {
-  return `<h2>${esc(title)}</h2><ul class="list digest">${rows.map(digestHtml).join("")}</ul>`;
-}
-
-function renderBriefing(res) {
-  const b = res.briefing;
-  const items = b ? b.items : [];
-  const todos = items.filter((i) => i.action || i.needs_reply);
-
-  $("overview").textContent = res.running
-    ? "Writing your briefing on the Mac mini… this can take a few minutes."
-    : b
-      ? b.overview || (items.length ? `${items.length} new messages, ${todos.length} need something from you.` : "Nothing new since your last briefing.")
-      : "No briefing yet. Tap Refresh briefing.";
-  $("bsummary").innerHTML = b && !res.running
-    ? `From ${ago(b.created_at)} · ${items.length} messages · ${todos.length} to do`
-    : "";
-  const note = res.error ? "Last attempt failed: " + res.error : (b && b.note) || "";
-  $("bnote").hidden = !note;
-  $("bnote").textContent = note;
-  $("brefresh").disabled = !!res.running;
-
-  $("todo-wrap").hidden = !todos.length;
-  $("todo").innerHTML = todos.map((i) => `<li class="todo-item">
-      <div class="todo-action">${esc(i.action || "Reply to " + i.sender)}${dueBadge(i)}${privateBadge(i)}</div>
-      <div class="meta">${esc(i.sender)} · ${esc(i.subject)}</div>
-    </li>`).join("");
-
-  const groups = new Map();
-  for (const i of items) {
-    const c = CATEGORY_ORDER.includes(i.category) ? i.category : "Other";
-    if (!groups.has(c)) groups.set(c, []);
-    groups.get(c).push(i);
-  }
-  const main = [], low = [];
-  for (const c of CATEGORY_ORDER) {
-    if (!groups.has(c)) continue;
-    (LOW_PRIORITY.has(c) ? low : main).push(sectionHtml(c, groups.get(c)));
-  }
-  const lowCount = items.filter((i) => LOW_PRIORITY.has(CATEGORY_ORDER.includes(i.category) ? i.category : "Other")).length;
-  $("sections").innerHTML = main.join("") +
-    (low.length ? `<details class="more"><summary>Also in your inbox (${lowCount})</summary>${low.join("")}</details>` : "");
-}
-
-async function loadBriefing() {
-  try {
-    const res = await api("/api/briefing");
-    store.set("bcache", JSON.stringify(res));
-    renderBriefing(res);
-    clearTimeout(pollTimer);
-    if (res.running) pollTimer = setTimeout(loadBriefing, 4000);
-  } catch (e) {
-    if (e.message !== "unauthorized") $("overview").textContent = "Can't reach your Mac mini. Is Tailscale on?";
-  }
-}
-
-$("brefresh").addEventListener("click", async () => {
-  $("brefresh").disabled = true;
-  try { await api("/api/briefing/run", { method: "POST" }); } catch (e) { alert(e.message); }
-  loadBriefing();
 });
 
 // ---- Chat ---------------------------------------------------------------------------------
@@ -284,9 +206,8 @@ $("chat-log").addEventListener("click", async (ev) => {
 
 function showTab(name) {
   $("view-chat").hidden = name !== "chat";
-  $("view-briefing").hidden = name !== "briefing";
   $("view-inbox").hidden = name !== "inbox";
-  $("title").textContent = { chat: "Chat", briefing: "Briefing", inbox: "Inbox" }[name];
+  $("title").textContent = { chat: "Chat", inbox: "Inbox" }[name];
   if (name === "chat") loadChat();
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === name));
   store.set("tab", name);
@@ -298,13 +219,8 @@ try {
   const c = JSON.parse(store.get("cache") || "null");
   if (c) { renderStatus(c.st); renderActions(c.rows); }
 } catch { /* ignore bad cache */ }
-try {
-  const bc = JSON.parse(store.get("bcache") || "null");
-  if (bc) renderBriefing(bc);
-} catch { /* ignore bad cache */ }
 const savedTab = store.get("tab");
-showTab(["chat", "briefing", "inbox"].includes(savedTab) ? savedTab : "chat");
+showTab(savedTab === "inbox" ? "inbox" : "chat");
 if (!store.get("token")) askToken();
 refresh();
-loadBriefing();
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});

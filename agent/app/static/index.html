@@ -14,13 +14,12 @@
 </head>
 <body>
   <header>
-    <h1 id="title">Briefing</h1>
+    <h1 id="title">Chat</h1>
     <span id="mode" class="pill"></span>
   </header>
 
   <nav class="tabs">
     <button id="tab-chat" class="tab" data-tab="chat">Chat</button>
-    <button id="tab-briefing" class="tab active" data-tab="briefing">Briefing</button>
     <button id="tab-inbox" class="tab" data-tab="inbox">Inbox</button>
   </nav>
 
@@ -32,20 +31,6 @@
       <textarea id="chat-input" rows="1" placeholder="Message" enterkeyhint="send"></textarea>
       <button id="chat-send" type="submit">Send</button>
     </form>
-  </main>
-
-  <main id="view-briefing">
-    <section class="card">
-      <p id="overview" class="overview">Loading…</p>
-      <div id="bsummary" class="summary"></div>
-      <div class="row"><button id="brefresh" class="secondary">Refresh briefing</button></div>
-      <p id="bnote" class="notice" hidden></p>
-    </section>
-    <div id="todo-wrap" hidden>
-      <h2>To do</h2>
-      <ul id="todo" class="list"></ul>
-    </div>
-    <div id="sections"></div>
   </main>
 
   <main id="view-inbox" hidden>

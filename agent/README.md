@@ -3,7 +3,8 @@
 A private assistant that runs on your Mac mini and is used from an iPhone Home Screen web app.
 Data stays on your machine; nothing is exposed to the public internet.
 
-**Status:** chat assistant (Gmail + Calendar), inbox triage, morning briefing and the web app.
+**Status:** chat assistant (Gmail + Calendar), inbox triage and the web app. The morning briefing is
+turned off (`BRIEFING_ENABLED=false`) and no longer shown in the app.
 Next: house budget (SimpleFIN), grocery lists, appointments from iMessage, Slack drafts.
 
 ## How it's reached (no public domain, no dynamic DNS, no open ports)
@@ -51,9 +52,9 @@ Setup (once): create an API key at console.anthropic.com, then on the Mini run
 `python -m app.secrets set-anthropic-key` (stored in the Keychain). Enable the **Google Calendar API**
 in your Google Cloud project and run `python -m app.auth_google` again to grant Calendar access.
 
-## Morning briefing
+## Morning briefing (off by default)
 
-Every morning (`BRIEFING_AT`, default 06:30) and on demand from the app, a **local model on the Mini**
+Set `BRIEFING_ENABLED=true` to turn it back on. When on, every morning (`BRIEFING_AT`, default 06:30) and on demand from the app, a **local model on the Mini**
 ([Ollama](https://ollama.com)) reads the last day of mail and writes a short briefing: a few sentences on what
 matters today, a **To do** list (actions and dates pulled from the emails), and a digest grouped by topic, with
 orders/newsletters folded away.

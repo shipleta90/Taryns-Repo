@@ -29,6 +29,7 @@ class Settings:
     data_dir: Path
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3.1:8b"
+    briefing_enabled: bool = False   # turned off in the app; set BRIEFING_ENABLED=true to bring it back
     briefing_at: str = "06:30"
     briefing_max_items: int = 25
     timezone: str = "America/Los_Angeles"
@@ -54,6 +55,7 @@ def load_settings() -> Settings:
         data_dir=data_dir,
         ollama_url=os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434"),
         ollama_model=os.environ.get("OLLAMA_MODEL", "llama3.1:8b"),
+        briefing_enabled=_bool(os.environ.get("BRIEFING_ENABLED", "false")),
         briefing_at=os.environ.get("BRIEFING_AT", "06:30"),
         briefing_max_items=int(os.environ.get("BRIEFING_MAX_ITEMS", "25")),
         timezone=os.environ.get("TIMEZONE", "America/Los_Angeles"),
