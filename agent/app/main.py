@@ -104,7 +104,7 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
             async def nightly():
                 await run_locked(None)
             tasks.append(asyncio.create_task(daily(settings.triage_at, nightly)))
-        if settings.briefing_at:
+        if settings.briefing_enabled and settings.briefing_at:
             tasks.append(asyncio.create_task(daily(settings.briefing_at, run_briefing)))
         yield
         for t in tasks:

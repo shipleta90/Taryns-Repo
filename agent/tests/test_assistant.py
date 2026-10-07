@@ -284,7 +284,15 @@ def test_briefing_tool_excludes_private_items(env):
                            {"sender": "Portal", "subject": "Doc", "summary": "p", "sensitive": "health"}],
                      None, "overview mentions the portal")
     a, claude = make([tool("get_briefing", {}), text("ok")])
+    a.briefing_enabled = True
     a.send("briefing?")
     r = last_tool_result(claude)
     assert [i["sender"] for i in r["items"]] == ["Coach"] and r["private_items_withheld"] == 1
     assert "overview" not in r
+
+
+def test_briefing_tool_when_turned_off(env):
+    make, *_ = env
+    a, claude = make([tool("get_briefing", {}), text("ok")])
+    a.send("briefing?")
+    assert "turned off" in last_tool_result(claude)["note"]

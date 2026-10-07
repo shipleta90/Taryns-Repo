@@ -85,6 +85,7 @@ class Assistant:
         self.effort = settings.claude_effort
         self.tz = ZoneInfo(settings.timezone)
         self.tz_name = settings.timezone
+        self.briefing_enabled = settings.briefing_enabled
 
     # --- conversation ---------------------------------------------------------------------
     def current_conversation(self) -> int:
@@ -192,6 +193,8 @@ class Assistant:
             t1 = dt.datetime.combine(end + dt.timedelta(days=1), dt.time.min, self.tz)
             return [privacy.event(e) for e in self.calendar().list_events(t0, t1)]
         if name == "get_briefing":
+            if not self.briefing_enabled:
+                return {"note": "The morning briefing is turned off. Use search_email instead."}
             b = self.db.latest_briefing()
             if not b:
                 return {"note": "No briefing yet."}
