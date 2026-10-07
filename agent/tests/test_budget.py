@@ -272,3 +272,12 @@ def test_running_hot_waits_for_enough_of_the_month():
     assert budget.running_hot(txns, dt.date(2026, 10, 5)) == []          # early month: not over yet
     txns += [tx("DOORDASH", -120, 2026, 10, 4, "Dining")]
     assert budget.running_hot(txns, dt.date(2026, 10, 5))[0]["projected"] == 270   # already over: flagged
+
+
+def test_planned_borrowing_counts_toward_goal_separately():
+    g = budget.goal_status({"target_price": 1_000_000, "borrow_amount": 50_000, "borrow_rate": 0.06,
+                            "target_date": "2027-05-01"}, house_balance=130_000, house_net_90d=None,
+                           today=dt.date(2026, 11, 1))
+    assert g["saved"] == 130_000 and g["borrow"] == 50_000
+    assert g["remaining"] == 50_000 and g["borrow_monthly_interest"] == 250.0
+    assert g["projected_at_target"] == 180_000
