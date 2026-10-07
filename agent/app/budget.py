@@ -153,6 +153,20 @@ def _prev_months(month: str, n: int) -> list[str]:
     return out
 
 
+def average_by_category(txns: list[dict], month: str, n: int = 6) -> tuple[dict[str, float], int]:
+    """Average monthly spend per category over up to `n` full months before `month`.
+    Only months that have any transactions count, so a short history isn't diluted by empty months."""
+    have_data = {month_key(t["posted"]) for t in txns}
+    months = [m for m in _prev_months(month, n) if m in have_data]
+    if not months:
+        return {}, 0
+    totals: dict[str, float] = {}
+    for m in months:
+        for cat, amt in spending_by_category(txns, m).items():
+            totals[cat] = totals.get(cat, 0.0) + amt
+    return {c: round(v / len(months), 2) for c, v in totals.items() if v / len(months) >= 1}, len(months)
+
+
 def running_hot(txns: list[dict], today: dt.date) -> list[dict]:
     """Categories on pace to beat their 3-month average by 15% and at least $50 this month
     (from day 10 on; before that, only categories already over their average)."""

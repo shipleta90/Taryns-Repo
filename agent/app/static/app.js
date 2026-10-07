@@ -218,9 +218,11 @@ function renderBudget(d) {
       <div class="meta">On pace for ${usd(h.projected)} vs. usual ${usd(h.usual)}</div></li>`).join("")}</ul>` : "");
 
   $("month-title").textContent = "This month · " + new Date(d.month + "-15").toLocaleDateString([], { month: "long" });
+  $("cats").setAttribute("aria-label", `Spending this month with ${d.average_months}-month averages`);
   $("cats").innerHTML = d.categories.length ? d.categories.map((c) => `<li class="cat-row" data-cat="${esc(c.category)}">
       <div class="cat-head"><span class="subject">${esc(c.category)}</span>
         <span>${usd(c.spent)}${c.limit ? ` <span class="meta">/ ${usd(c.limit)}</span>` : ""}</span></div>
+      ${c.average != null ? `<div class="meta">Avg ${usd(c.average)}/mo over ${d.average_months} mo</div>` : ""}
       ${c.limit ? `<div class="bar ${esc(c.status)}"><span style="width:${Math.min(c.percent, 100)}%"></span></div>` : ""}
       <div class="meta"><button class="link setlimit" data-cat="${esc(c.category)}">${c.limit ? "Change limit" : "Set a limit"}</button></div>
       <div class="txns" hidden></div></li>`).join("") : '<li class="empty">No spending yet this month.</li>';
@@ -282,7 +284,9 @@ $("view-budget").addEventListener("click", async (ev) => {
     budgetPost(`/api/budget/accounts/${encodeURIComponent(a.id)}`, { [t.dataset.flag]: !a[t.dataset.flag] });
   } else if (t.matches(".setlimit")) {
     const cur = budgetData.categories.find((c) => c.category === t.dataset.cat);
-    const v = prompt(`Monthly limit for ${t.dataset.cat} (leave empty to remove):`, cur && cur.limit ? cur.limit : "");
+    const hint = cur && cur.average != null ? `\nYour average is ${usd(cur.average)}/mo. Suggested: ${usd(cur.suggested_limit)} (10% under).` : "";
+    const v = prompt(`Monthly limit for ${t.dataset.cat} (leave empty to remove):${hint}`,
+      cur && cur.limit ? cur.limit : (cur && cur.suggested_limit ? cur.suggested_limit : ""));
     if (v !== null) budgetPost("/api/budget/limits", { category: t.dataset.cat, monthly_limit: v === "" ? null : Number(v) });
   } else if (t.closest(".cat-row") && !t.closest("button") && !t.closest(".txns") && !t.closest("select")) {
     const row = t.closest(".cat-row"), box = row.querySelector(".txns");

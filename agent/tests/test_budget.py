@@ -288,3 +288,26 @@ def test_condo_sale_proceeds_count_toward_goal():
                             "target_date": "2027-05-01"}, house_balance=100_000, house_net_90d=None,
                            today=dt.date(2026, 11, 1))
     assert g["sale_proceeds"] == 50_000 and g["remaining"] == 30_000 and g["percent"] == round(200 / 230 * 100, 1)
+
+
+def test_six_month_average_ignores_months_before_history_starts():
+    txns = [tx("DOORDASH", -300, 2026, m, 10, "Dining") for m in (7, 8, 9)]
+    txns += [tx("DOORDASH", -150, 2026, 9, 20, "Dining"), tx("TARGET", -90, 2026, 8, 3, "Shopping")]
+    txns += [tx("DOORDASH", -50, 2026, 10, 2, "Dining")]          # current month: excluded
+    avg, months = budget.average_by_category(txns, "2026-10", 6)
+    assert months == 3                                          # only Jul-Sep have data
+    assert avg == {"Dining": 350.0, "Shopping": 30.0}
+
+
+def test_summary_shows_averages_and_suggested_limits(db):
+    now = dt.datetime.now()
+    first_of_month = now.replace(day=1)
+    txns = []
+    for k in range(1, 4):
+        when = (first_of_month - dt.timedelta(days=30 * k - 5)).timestamp()
+        txns.append({"id": f"sf:card:{k}", "account_id": "sf:card", "posted": when, "amount": -400.0,
+                     "description": "DOORDASH CHIPOTLE"})
+    budget_service.sync(FakeSF([{"id": "sf:card", "org": "Amex", "name": "Gold", "balance": 0,
+                                 "balance_date": 0}], txns), db, FakeLLM())
+    row = next(c for c in budget_service.summary(db)["categories"] if c["category"] == "Dining")
+    assert row["average"] == 400.0 and row["suggested_limit"] == 360 and row["spent"] == 0
