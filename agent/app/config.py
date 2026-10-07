@@ -35,6 +35,7 @@ class Settings:
     morning_at: str = "06:30"        # Chief-of-Staff briefing time; "" turns it off
     morning_effort: str = "medium"
     morning_about: str = ""          # one line about you, to tailor "The Strategic Play"
+    budget_sync_at: str = "05:15"     # daily bank sync; "" turns it off
     timezone: str = "America/Los_Angeles"
     claude_model: str = "claude-opus-5-5"
     claude_effort: str = "medium"
@@ -64,6 +65,7 @@ def load_settings() -> Settings:
         morning_at=os.environ.get("MORNING_AT", "06:30"),
         morning_effort=os.environ.get("MORNING_EFFORT", "medium"),
         morning_about=os.environ.get("MORNING_ABOUT", ""),
+        budget_sync_at=os.environ.get("BUDGET_SYNC_AT", "05:15"),
         timezone=os.environ.get("TIMEZONE", "America/Los_Angeles"),
         claude_model=os.environ.get("CLAUDE_MODEL", "claude-opus-5-5"),
         claude_effort=os.environ.get("CLAUDE_EFFORT", "medium"),
