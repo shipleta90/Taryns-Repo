@@ -44,7 +44,10 @@ def test_run_then_undo(client):
 
 
 def test_static_app_served(client):
-    assert "Inbox" in client.get("/").text
+    page = client.get("/")
+    assert "Inbox" in page.text and page.headers["cache-control"] == "no-cache"
+    assert '/static/app.js?v=' in page.text and '/static/style.css?v=' in page.text
+    assert client.get("/static/app.js").headers["cache-control"] == "no-cache"
     assert client.get("/sw.js").status_code == 200
     assert client.get("/static/manifest.webmanifest").status_code == 200
 
