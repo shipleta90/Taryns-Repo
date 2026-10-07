@@ -44,6 +44,8 @@ class BudgetSettings(BaseModel):
     closing_pct: float | None = None
     cushion: float | None = None
     target_date: str | None = None
+    borrow_amount: float | None = None     # planned securities-backed loan (or other borrowing)
+    borrow_rate: float | None = None       # annual rate as a fraction, e.g. 0.065
 
 
 class AccountFlags(BaseModel):
@@ -284,7 +286,7 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
                 dt.date.fromisoformat(values["target_date"])
             except ValueError:
                 raise HTTPException(status_code=400, detail="target_date must be YYYY-MM-DD")
-        for k in ("down_pct", "closing_pct"):
+        for k in ("down_pct", "closing_pct", "borrow_rate"):
             if k in values and not 0 <= values[k] <= 1:
                 raise HTTPException(status_code=400, detail=f"{k} must be between 0 and 1")
         db.set_fin_settings(values)
