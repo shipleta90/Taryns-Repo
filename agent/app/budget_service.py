@@ -105,12 +105,17 @@ def summary(db: Database, today: dt.date | None = None) -> dict:
 
     month = today.strftime("%Y-%m")
     spent = budget.spending_by_category(txns, month)
+    averages, avg_months = budget.average_by_category(txns, month, 6)
     limits = db.fin_limits()
     categories = []
-    for cat in sorted(set(spent) | set(limits), key=lambda c: -spent.get(c, 0)):
+    for cat in sorted(set(spent) | set(limits) | set(averages),
+                      key=lambda c: -max(spent.get(c, 0), averages.get(c, 0))):
         lim = limits.get(cat)
         used = spent.get(cat, 0.0)
-        categories.append({"category": cat, "spent": used, "limit": lim,
+        avg = averages.get(cat)
+        categories.append({"category": cat, "spent": used, "limit": lim, "average": avg,
+                           # a starting point: 10% under your usual, rounded to $10
+                           "suggested_limit": round(avg * 0.9 / 10) * 10 if avg else None,
                            "percent": round(used / lim * 100) if lim else None,
                            "status": None if not lim else "over" if used > lim else "near" if used >= 0.8 * lim else "ok"})
 
@@ -123,7 +128,7 @@ def summary(db: Database, today: dt.date | None = None) -> dict:
         "accounts": [{k: a[k] for k in ("id", "org", "name", "balance", "source", "is_house", "hidden")}
                      for a in accounts],
         "cuts": {"recurring": recurring, "running_hot": budget.running_hot(txns, today)},
-        "month": month, "categories": categories, "category_names": budget.SPEND_CATEGORIES,
+        "month": month, "categories": categories, "average_months": avg_months, "category_names": budget.SPEND_CATEGORIES,
         "uncategorized": uncategorized[:50],
     }
 
