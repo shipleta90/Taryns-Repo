@@ -163,6 +163,147 @@ $("mrefresh").addEventListener("click", async () => {
   loadMorning();
 });
 
+// ---- Budget (all data stays on the Mac mini) ----------------------------------------------
+const usd = (n, cents) => (n == null ? "—" : Number(n).toLocaleString("en-US",
+  { style: "currency", currency: "USD", maximumFractionDigits: cents ? 2 : 0, minimumFractionDigits: cents ? 2 : 0 }));
+let budgetData = null;
+
+function goalHtml(g) {
+  if (!g) {
+    return `<div class="summary">Set your target home price to see if you're on track.</div>
+      <div class="row"><button id="opengoal">Set target price</button></div>`;
+  }
+  const verdict = g.on_track == null
+    ? `<div class="verdict">Pick your house savings account(s) below to see your monthly pace.</div>`
+    : g.on_track
+      ? `<div class="verdict good">On track: saving about ${usd(g.saving_per_month)}/mo; you need ${usd(g.needed_per_month)}/mo.</div>`
+      : `<div class="verdict bad">Behind by about ${usd(g.gap_per_month)}/mo. Saving ${usd(g.saving_per_month)}/mo; you need ${usd(g.needed_per_month)}/mo.</div>`;
+  return `<div class="kind meta">Down payment + closing by ${esc(new Date(g.target_date + "T12:00").toLocaleDateString([], { month: "long", year: "numeric" }))}</div>
+    <div class="big">${usd(g.saved)} <span class="meta" style="font-size:16px;font-weight:500">of ${usd(g.goal)}</span></div>
+    <div class="bar ok"><span style="width:${Math.min(g.percent, 100)}%"></span></div>
+    <div class="goal-grid">
+      <div class="stat"><div class="label">Still needed</div><div class="val">${usd(g.remaining)}</div></div>
+      <div class="stat"><div class="label">Per month</div><div class="val">${usd(g.needed_per_month)}</div></div>
+      <div class="stat"><div class="label">Months left</div><div class="val">${esc(g.months_left)}</div></div>
+      <div class="stat"><div class="label">Projected by then</div><div class="val">${usd(g.projected_at_target)}</div></div>
+    </div>
+    ${verdict}
+    <div class="meta" style="margin-top:6px">20% down ${usd(g.down_payment)} · closing ${usd(g.closing_costs)}${g.cushion ? " · cushion " + usd(g.cushion) : ""}</div>`;
+}
+
+function renderBudget(d) {
+  budgetData = d;
+  const note = d.error ? "Sync failed: " + d.error
+    : (!d.accounts.length ? "No accounts yet. Connect your banks on the Mac mini (python -m app.secrets set-simplefin), then tap Sync, or import a card CSV below." : "");
+  $("bnote").hidden = !note;
+  $("bnote").textContent = note;
+  $("goal").innerHTML = goalHtml(d.goal);
+  const og = $("opengoal");
+  if (og) og.onclick = () => { $("goalsettings").open = true; $("gprice").focus(); };
+
+  const rec = d.cuts.recurring, hot = d.cuts.running_hot;
+  $("cuts-wrap").hidden = !rec.length && !hot.length;
+  $("cuts").innerHTML =
+    (rec.length ? `<p class="meta" style="margin:0 4px 8px">Subscriptions and bills that repeat every month.</p><ul class="list">${rec.map((r) => `<li>
+      <div class="cut-row"><span class="subject">${esc(r.merchant)}</span><span class="amt">${usd(r.monthly, true)}/mo</span></div>
+      <div class="meta">${esc(r.category)} · ${usd(r.yearly)}/yr · cancelling adds ${usd(r.adds_by_target)} by your date</div></li>`).join("")}</ul>` : "") +
+    (hot.length ? `<h2>Running hot this month</h2><ul class="list">${hot.map((h) => `<li>
+      <div class="cut-row"><span class="subject">${esc(h.category)}</span><span class="amt">+${usd(h.over_by)}</span></div>
+      <div class="meta">On pace for ${usd(h.projected)} vs. usual ${usd(h.usual)}</div></li>`).join("")}</ul>` : "");
+
+  $("month-title").textContent = "This month · " + new Date(d.month + "-15").toLocaleDateString([], { month: "long" });
+  $("cats").innerHTML = d.categories.length ? d.categories.map((c) => `<li class="cat-row" data-cat="${esc(c.category)}">
+      <div class="cat-head"><span class="subject">${esc(c.category)}</span>
+        <span>${usd(c.spent)}${c.limit ? ` <span class="meta">/ ${usd(c.limit)}</span>` : ""}</span></div>
+      ${c.limit ? `<div class="bar ${esc(c.status)}"><span style="width:${Math.min(c.percent, 100)}%"></span></div>` : ""}
+      <div class="meta"><button class="link setlimit" data-cat="${esc(c.category)}">${c.limit ? "Change limit" : "Set a limit"}</button></div>
+      <div class="txns" hidden></div></li>`).join("") : '<li class="empty">No spending yet this month.</li>';
+
+  $("uncat-wrap").hidden = !d.uncategorized.length;
+  const opts = (sel) => d.category_names.concat(["Income", "Transfer"]).map((c) =>
+    `<option ${c === sel ? "selected" : ""}>${esc(c)}</option>`).join("");
+  $("uncat").innerHTML = d.uncategorized.map((m) => `<li><div class="acct-row"><span class="subject">${esc(m)}</span>
+      <select class="recat" data-merchant="${esc(m)}"><option value="">Choose…</option>${opts("")}</select></div></li>`).join("");
+
+  $("accts").innerHTML = d.accounts.length ? d.accounts.map((a) => `<li>
+      <div class="acct-row"><span class="subject">${esc(a.name)}</span><span>${a.balance == null ? "" : usd(a.balance)}</span></div>
+      <div class="meta">${esc(a.org)}${a.hidden ? " · hidden from budget" : ""}</div>
+      <div class="acct-btns"><button class="toggle secondary ${a.is_house ? "on" : ""}" data-acct="${esc(a.id)}" data-flag="is_house">${a.is_house ? "House savings ✓" : "Count as house savings"}</button>
+        <button class="toggle secondary" data-acct="${esc(a.id)}" data-flag="hidden">${a.hidden ? "Show" : "Hide"}</button></div></li>`).join("")
+    : '<li class="empty">No accounts connected yet.</li>';
+
+  $("bsync").disabled = !!d.running;
+  $("bsync").textContent = d.running ? "Syncing…" : "Sync banks now";
+  $("bsyncinfo").textContent = (d.last_sync ? "Last synced " + ago(d.last_sync) + "." : "") +
+    (d.sync_errors && d.sync_errors.length ? " Bank messages: " + d.sync_errors.join("; ") : "");
+
+  const s = d.settings || {};
+  if (document.activeElement.closest("#goalsettings") == null) {
+    $("gprice").value = s.target_price || "";
+    $("gdown").value = ((s.down_pct ?? 0.2) * 100).toString();
+    $("gclose").value = ((s.closing_pct ?? 0.03) * 100).toString();
+    $("gcush").value = s.cushion || "";
+    $("gdate").value = s.target_date || "2027-05-01";
+  }
+  if (d.running) setTimeout(loadBudget, 4000);
+}
+
+async function loadBudget() {
+  try { renderBudget(await api("/api/budget")); }
+  catch (e) { if (e.message !== "unauthorized") { $("bnote").hidden = false; $("bnote").textContent = "Can't load the budget: " + e.message; } }
+}
+
+async function budgetPost(path, body) {
+  try { renderBudget(await api(path, { method: "POST", body: JSON.stringify(body) })); } catch (e) { alert(e.message); }
+}
+
+$("gsave").addEventListener("click", () => {
+  const num = (id) => ($(id).value === "" ? null : Number($(id).value));
+  budgetPost("/api/budget/settings", {
+    target_price: num("gprice"), down_pct: num("gdown") / 100, closing_pct: num("gclose") / 100,
+    cushion: num("gcush") ?? 0, target_date: $("gdate").value || null,
+  });
+  $("goalsettings").open = false;
+});
+
+$("view-budget").addEventListener("click", async (ev) => {
+  const t = ev.target;
+  if (t.matches(".toggle[data-acct]")) {
+    const a = budgetData.accounts.find((x) => x.id === t.dataset.acct);
+    budgetPost(`/api/budget/accounts/${encodeURIComponent(a.id)}`, { [t.dataset.flag]: !a[t.dataset.flag] });
+  } else if (t.matches(".setlimit")) {
+    const cur = budgetData.categories.find((c) => c.category === t.dataset.cat);
+    const v = prompt(`Monthly limit for ${t.dataset.cat} (leave empty to remove):`, cur && cur.limit ? cur.limit : "");
+    if (v !== null) budgetPost("/api/budget/limits", { category: t.dataset.cat, monthly_limit: v === "" ? null : Number(v) });
+  } else if (t.closest(".cat-row") && !t.closest("button") && !t.closest(".txns")) {
+    const row = t.closest(".cat-row"), box = row.querySelector(".txns");
+    if (!box.hidden) { box.hidden = true; return; }
+    try {
+      const rows = await api(`/api/budget/transactions?month=${budgetData.month}&category=${encodeURIComponent(row.dataset.cat)}`);
+      box.innerHTML = rows.map((r) => `<div><span>${esc(r.date.slice(5))} ${esc(r.merchant)}</span><span>${usd(-r.amount, true)}</span></div>`).join("") || "<div>No transactions.</div>";
+      box.hidden = false;
+    } catch (e) { alert(e.message); }
+  }
+});
+$("view-budget").addEventListener("change", (ev) => {
+  if (ev.target.matches(".recat") && ev.target.value)
+    budgetPost("/api/budget/merchant", { merchant: ev.target.dataset.merchant, category: ev.target.value });
+});
+$("bsync").addEventListener("click", async () => {
+  try { await api("/api/budget/sync", { method: "POST" }); } catch (e) { alert(e.message); }
+  loadBudget();
+});
+$("csvgo").addEventListener("click", async () => {
+  const file = $("csvfile").files[0];
+  if (!file) { alert("Choose a CSV file first."); return; }
+  const text = await file.text();
+  try {
+    const res = await api("/api/budget/import", { method: "POST", body: JSON.stringify({ account_name: $("csvname").value || file.name, csv: text }) });
+    alert(`Imported ${res.imported.new_transactions} new transactions.`);
+    renderBudget(res);
+  } catch (e) { alert("Import failed: " + e.message); }
+});
+
 // ---- Chat ---------------------------------------------------------------------------------
 let chatBusy = false;
 
@@ -269,10 +410,12 @@ $("chat-log").addEventListener("click", async (ev) => {
 function showTab(name) {
   $("view-chat").hidden = name !== "chat";
   $("view-morning").hidden = name !== "morning";
+  $("view-budget").hidden = name !== "budget";
   $("view-inbox").hidden = name !== "inbox";
-  $("title").textContent = { chat: "Chat", morning: "Briefing", inbox: "Inbox" }[name];
+  $("title").textContent = { chat: "Chat", morning: "Briefing", budget: "Budget", inbox: "Inbox" }[name];
   if (name === "chat") loadChat();
   if (name === "morning") loadMorning();
+  if (name === "budget") loadBudget();
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === name));
   store.set("tab", name);
 }
@@ -288,7 +431,7 @@ try {
   const mc = JSON.parse(store.get("mcache") || "null");
   if (mc) renderMorning(mc);
 } catch { /* ignore bad cache */ }
-showTab(["chat", "morning", "inbox"].includes(savedTab) ? savedTab : "chat");
+showTab(["chat", "morning", "budget", "inbox"].includes(savedTab) ? savedTab : "chat");
 if (!store.get("token")) askToken();
 refresh();
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});

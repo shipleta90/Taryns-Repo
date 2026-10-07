@@ -67,6 +67,39 @@ CREATE TABLE IF NOT EXISTS morning (
     sources_json TEXT NOT NULL,
     note TEXT
 );
+CREATE TABLE IF NOT EXISTS fin_accounts (
+    id TEXT PRIMARY KEY,
+    org TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'USD',
+    balance REAL,                 -- NULL for CSV-imported accounts (no balance in a statement export)
+    balance_date REAL,
+    source TEXT NOT NULL,         -- simplefin | csv
+    is_house INTEGER NOT NULL DEFAULT 0,
+    hidden INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS fin_txns (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    posted REAL NOT NULL,
+    amount REAL NOT NULL,         -- money out is negative
+    description TEXT NOT NULL,
+    merchant TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS fin_txns_posted ON fin_txns(posted);
+CREATE TABLE IF NOT EXISTS fin_merchants (
+    merchant TEXT PRIMARY KEY,
+    category TEXT NOT NULL,
+    source TEXT NOT NULL          -- rule | local_model | user
+);
+CREATE TABLE IF NOT EXISTS fin_limits (
+    category TEXT PRIMARY KEY,
+    monthly_limit REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS fin_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     started_at REAL NOT NULL,
@@ -277,3 +310,84 @@ class Database:
         out = dict(row)
         out["sources"] = json.loads(out.pop("sources_json"))
         return out
+
+    # budget (all local; never sent to the cloud model)
+    def upsert_fin_account(self, a: dict, source: str) -> None:
+        with self.conn:
+            self.conn.execute(
+                "INSERT INTO fin_accounts(id, org, name, currency, balance, balance_date, source)"
+                " VALUES (?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET org=excluded.org, name=excluded.name,"
+                " currency=excluded.currency, balance=excluded.balance, balance_date=excluded.balance_date",
+                (a["id"], a.get("org", ""), a["name"], a.get("currency", "USD"), a.get("balance"),
+                 a.get("balance_date"), source))
+
+    def fin_accounts(self) -> list[dict]:
+        return [dict(r) for r in self.conn.execute("SELECT * FROM fin_accounts ORDER BY org, name")]
+
+    def set_fin_account_flags(self, account_id: str, is_house: bool | None, hidden: bool | None) -> bool:
+        with self.conn:
+            cur = self.conn.execute(
+                "UPDATE fin_accounts SET is_house=COALESCE(?, is_house), hidden=COALESCE(?, hidden) WHERE id=?",
+                (None if is_house is None else int(is_house), None if hidden is None else int(hidden), account_id))
+        return cur.rowcount == 1
+
+    def add_fin_txns(self, txns: list[dict]) -> int:
+        """Insert new transactions; ones already stored (same id) are left untouched."""
+        with self.conn:
+            before = self.conn.total_changes
+            self.conn.executemany(
+                "INSERT OR IGNORE INTO fin_txns(id, account_id, posted, amount, description, merchant)"
+                " VALUES (?,?,?,?,?,?)",
+                [(t["id"], t["account_id"], t["posted"], t["amount"], t["description"], t["merchant"]) for t in txns])
+            return self.conn.total_changes - before
+
+    def fin_txns(self, since: float = 0) -> list[dict]:
+        """Transactions from visible accounts, with their category (Uncategorized if none yet)."""
+        rows = self.conn.execute(
+            "SELECT t.*, COALESCE(m.category, 'Uncategorized') AS category, a.is_house"
+            " FROM fin_txns t JOIN fin_accounts a ON a.id = t.account_id"
+            " LEFT JOIN fin_merchants m ON m.merchant = t.merchant"
+            " WHERE a.hidden = 0 AND t.posted >= ? ORDER BY t.posted DESC", (since,))
+        return [dict(r) for r in rows]
+
+    def merchants_without_category(self) -> list[str]:
+        rows = self.conn.execute(
+            "SELECT DISTINCT t.merchant FROM fin_txns t LEFT JOIN fin_merchants m ON m.merchant = t.merchant"
+            " WHERE m.merchant IS NULL")
+        return [r["merchant"] for r in rows]
+
+    def set_merchant_category(self, merchant: str, category: str, source: str) -> None:
+        """A choice you made yourself is never overwritten by rules or the model."""
+        with self.conn:
+            if source == "user":
+                self.conn.execute(
+                    "INSERT INTO fin_merchants(merchant, category, source) VALUES (?,?,?)"
+                    " ON CONFLICT(merchant) DO UPDATE SET category=excluded.category, source=excluded.source",
+                    (merchant, category, source))
+            else:
+                self.conn.execute(
+                    "INSERT INTO fin_merchants(merchant, category, source) VALUES (?,?,?)"
+                    " ON CONFLICT(merchant) DO UPDATE SET category=excluded.category, source=excluded.source"
+                    " WHERE fin_merchants.source != 'user'", (merchant, category, source))
+
+    def fin_limits(self) -> dict[str, float]:
+        return {r["category"]: r["monthly_limit"] for r in self.conn.execute("SELECT * FROM fin_limits")}
+
+    def set_fin_limit(self, category: str, monthly_limit: float | None) -> None:
+        with self.conn:
+            if not monthly_limit:
+                self.conn.execute("DELETE FROM fin_limits WHERE category=?", (category,))
+            else:
+                self.conn.execute("INSERT INTO fin_limits(category, monthly_limit) VALUES (?,?)"
+                                  " ON CONFLICT(category) DO UPDATE SET monthly_limit=excluded.monthly_limit",
+                                  (category, monthly_limit))
+
+    def fin_settings(self) -> dict:
+        return {r["key"]: json.loads(r["value"]) for r in self.conn.execute("SELECT * FROM fin_settings")}
+
+    def set_fin_settings(self, values: dict) -> None:
+        with self.conn:
+            self.conn.executemany(
+                "INSERT INTO fin_settings(key, value) VALUES (?,?)"
+                " ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                [(k, json.dumps(v)) for k, v in values.items()])

@@ -3,8 +3,8 @@
 A private assistant that runs on your Mac mini and is used from an iPhone Home Screen web app.
 Data stays on your machine; nothing is exposed to the public internet.
 
-**Status:** chat assistant (Gmail + Calendar), Chief-of-Staff morning briefing, inbox triage and the
-web app. (The older email-only briefing is turned off: `BRIEFING_ENABLED=false`.)
+**Status:** chat assistant (Gmail + Calendar), Chief-of-Staff morning briefing, house budget, inbox
+triage and the web app. (The older email-only briefing is turned off: `BRIEFING_ENABLED=false`.)
 Next: house budget (SimpleFIN), grocery lists, appointments from iMessage, Slack drafts.
 
 ## How it's reached (no public domain, no dynamic DNS, no open ports)
@@ -51,6 +51,23 @@ search and read mail, check your calendar, and propose emails and events.
 Setup (once): create an API key at console.anthropic.com, then on the Mini run
 `python -m app.secrets set-anthropic-key` (stored in the Keychain). Enable the **Google Calendar API**
 in your Google Cloud project and run `python -m app.auth_google` again to grant Calendar access.
+
+## House budget (Budget tab)
+
+Tracks the down payment goal (default 20% down + 3% closing, by May 1), finds subscriptions to cancel,
+flags categories running hot, and lets you set monthly category limits.
+
+- **Data:** read-only bank and card feed through [SimpleFIN Bridge](https://bridge.simplefin.org) (it cannot
+  move money). Connect both partners' banks in one SimpleFIN account, create a Setup Token, then on the
+  Mini run `python -m app.secrets set-simplefin`. Syncs daily at `BUDGET_SYNC_AT` (default 05:15) and on
+  demand. First sync pulls 6 months.
+- **Cards SimpleFIN can't reach:** import the card's "download transactions" CSV in the app (Chase, Amex,
+  Citi, BofA, Capital One, Apple Card layouts; re-importing never duplicates).
+- **Private by design:** banking data never goes to Claude. Merchants are categorized by keyword rules,
+  then the local model (merchant names only, no amounts); your own re-categorizations always win. Chat has
+  no access to budget data.
+- Mark which accounts are **house savings** in the app; "saving per month" is their net inflow over the
+  last 90 days. Hide accounts that shouldn't count (e.g. a business card).
 
 ## Chief-of-Staff briefing (Briefing tab)
 

@@ -1,5 +1,6 @@
 """FastAPI app. Bind it to 127.0.0.1 and expose it only through `tailscale serve`."""
 import asyncio
+import datetime as dt
 import hashlib
 import contextlib
 import logging
@@ -15,6 +16,7 @@ from . import service
 from .config import Settings, load_settings
 from .db import Database
 from . import briefing as briefing_mod
+from . import budget_service
 from . import morning as morning_mod
 from .assistant import Assistant
 from .llm import LocalLLM
@@ -36,8 +38,37 @@ class ApproveRequest(BaseModel):
     mode: str = "send"   # send | draft (emails only)
 
 
+class BudgetSettings(BaseModel):
+    target_price: float | None = None
+    down_pct: float | None = None
+    closing_pct: float | None = None
+    cushion: float | None = None
+    target_date: str | None = None
+
+
+class AccountFlags(BaseModel):
+    is_house: bool | None = None
+    hidden: bool | None = None
+
+
+class LimitRequest(BaseModel):
+    category: str
+    monthly_limit: float | None = None
+
+
+class MerchantRequest(BaseModel):
+    merchant: str
+    category: str
+
+
+class ImportRequest(BaseModel):
+    account_name: str
+    csv: str
+
+
 def create_app(settings: Settings | None = None, gmail=None, db: Database | None = None,
-               llm: LocalLLM | None = None, calendar=None, claude=None, slack=None) -> FastAPI:
+               llm: LocalLLM | None = None, calendar=None, claude=None, slack=None,
+               simplefin=None) -> FastAPI:
     settings = settings or load_settings()
     db = db or Database(settings.db_path)
     if not settings.token:
@@ -94,6 +125,32 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
 
     morning_state = {"running": False, "error": None}
 
+    def get_simplefin():
+        nonlocal simplefin
+        if simplefin is None:
+            from .secrets import simplefin_access_url
+            from .simplefin import SimpleFINClient
+            url = simplefin_access_url()
+            if not url:
+                raise RuntimeError("Bank feed not connected yet. On the Mac mini run: "
+                                   "python -m app.secrets set-simplefin")
+            simplefin = SimpleFINClient(url)
+        return simplefin
+
+    budget_state = {"running": False, "error": None}
+
+    async def run_budget_sync():
+        if budget_state["running"]:
+            return
+        budget_state.update(running=True, error=None)
+        try:
+            await asyncio.to_thread(budget_service.sync, get_simplefin(), db, llm)
+        except Exception as exc:  # shown in the app
+            log.warning("budget sync failed: %s", exc)
+            budget_state["error"] = str(exc)[:300]
+        finally:
+            budget_state["running"] = False
+
     async def run_morning():
         if morning_state["running"]:
             return
@@ -139,6 +196,8 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
             tasks.append(asyncio.create_task(daily(settings.triage_at, nightly)))
         if settings.morning_at:
             tasks.append(asyncio.create_task(daily(settings.morning_at, run_morning)))
+        if settings.budget_sync_at:
+            tasks.append(asyncio.create_task(daily(settings.budget_sync_at, run_budget_sync)))
         if settings.briefing_enabled and settings.briefing_at:
             tasks.append(asyncio.create_task(daily(settings.briefing_at, run_briefing)))
         yield
@@ -205,6 +264,65 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
         if not morning_state["running"]:
             asyncio.create_task(run_morning())
         return {"started": True}
+
+    # --- budget (local only) ---------------------------------------------------------------
+    @app.get("/api/budget", dependencies=[Depends(require_auth)])
+    def budget_summary():
+        return {**budget_service.summary(db), **budget_state}
+
+    @app.post("/api/budget/sync", status_code=202, dependencies=[Depends(require_auth)])
+    async def budget_sync():
+        if not budget_state["running"]:
+            asyncio.create_task(run_budget_sync())
+        return {"started": True}
+
+    @app.post("/api/budget/settings", dependencies=[Depends(require_auth)])
+    def budget_settings(req: BudgetSettings):
+        values = {k: v for k, v in req.model_dump().items() if v is not None}
+        if "target_date" in values:
+            try:
+                dt.date.fromisoformat(values["target_date"])
+            except ValueError:
+                raise HTTPException(status_code=400, detail="target_date must be YYYY-MM-DD")
+        for k in ("down_pct", "closing_pct"):
+            if k in values and not 0 <= values[k] <= 1:
+                raise HTTPException(status_code=400, detail=f"{k} must be between 0 and 1")
+        db.set_fin_settings(values)
+        return budget_service.summary(db)
+
+    @app.post("/api/budget/accounts/{account_id}", dependencies=[Depends(require_auth)])
+    def budget_account(account_id: str, req: AccountFlags):
+        if not db.set_fin_account_flags(account_id, req.is_house, req.hidden):
+            raise HTTPException(status_code=404, detail="no such account")
+        return budget_service.summary(db)
+
+    @app.post("/api/budget/limits", dependencies=[Depends(require_auth)])
+    def budget_limit(req: LimitRequest):
+        if req.category not in budget_service.budget.SPEND_CATEGORIES:
+            raise HTTPException(status_code=400, detail="unknown category")
+        db.set_fin_limit(req.category, req.monthly_limit)
+        return budget_service.summary(db)
+
+    @app.post("/api/budget/merchant", dependencies=[Depends(require_auth)])
+    def budget_merchant(req: MerchantRequest):
+        if req.category not in budget_service.budget.CATEGORIES:
+            raise HTTPException(status_code=400, detail="unknown category")
+        db.set_merchant_category(req.merchant, req.category, "user")
+        return budget_service.summary(db)
+
+    @app.post("/api/budget/import", dependencies=[Depends(require_auth)])
+    async def budget_import(req: ImportRequest):
+        if len(req.csv) > 5_000_000:
+            raise HTTPException(status_code=400, detail="file too large")
+        try:
+            result = await asyncio.to_thread(budget_service.import_csv, db, llm, req.account_name, req.csv)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        return {"imported": result, **budget_service.summary(db)}
+
+    @app.get("/api/budget/transactions", dependencies=[Depends(require_auth)])
+    def budget_transactions(month: str, category: str | None = None):
+        return budget_service.transactions(db, month, category)
 
     @app.get("/api/chat", dependencies=[Depends(require_auth)])
     def chat_transcript():

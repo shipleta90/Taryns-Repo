@@ -21,6 +21,7 @@
   <nav class="tabs">
     <button id="tab-chat" class="tab" data-tab="chat">Chat</button>
     <button id="tab-morning" class="tab" data-tab="morning">Briefing</button>
+    <button id="tab-budget" class="tab" data-tab="budget">Budget</button>
     <button id="tab-inbox" class="tab" data-tab="inbox">Inbox</button>
   </nav>
 
@@ -42,6 +43,43 @@
     </section>
     <article id="mbody" class="brief"></article>
     <details id="msources" class="more" hidden><summary>Sources</summary><ul id="msourcelist" class="list"></ul></details>
+  </main>
+
+  <main id="view-budget" hidden>
+    <p id="bnote" class="notice" hidden></p>
+    <section id="goal" class="card"></section>
+
+    <div id="cuts-wrap"><h2>Find cuts</h2><div id="cuts"></div></div>
+
+    <h2 id="month-title">This month</h2>
+    <ul id="cats" class="list"></ul>
+
+    <div id="uncat-wrap" hidden><h2>Needs a category</h2><ul id="uncat" class="list"></ul></div>
+
+    <h2>Accounts</h2>
+    <ul id="accts" class="list"></ul>
+    <div class="row" style="margin-top:10px"><button id="bsync" class="secondary">Sync banks now</button></div>
+    <p id="bsyncinfo" class="meta" style="margin:8px 4px"></p>
+
+    <details class="more"><summary>Import a card statement (CSV)</summary>
+      <section class="card form">
+        <label>Card name <input id="csvname" placeholder="e.g. Amex Gold" maxlength="60"></label>
+        <label>CSV file <input id="csvfile" type="file" accept=".csv,text/csv"></label>
+        <button id="csvgo">Import</button>
+        <p class="meta">Download “transactions as CSV” from the card’s website. It stays on your Mac mini.</p>
+      </section>
+    </details>
+
+    <details class="more" id="goalsettings"><summary>Goal settings</summary>
+      <section class="card form">
+        <label>Target home price ($) <input id="gprice" type="number" inputmode="decimal" min="0" step="1000"></label>
+        <label>Down payment (%) <input id="gdown" type="number" inputmode="decimal" min="0" max="100" step="0.5"></label>
+        <label>Closing costs (%) <input id="gclose" type="number" inputmode="decimal" min="0" max="10" step="0.25"></label>
+        <label>Extra cash cushion ($) <input id="gcush" type="number" inputmode="decimal" min="0" step="500"></label>
+        <label>Buy by <input id="gdate" type="date"></label>
+        <button id="gsave">Save</button>
+      </section>
+    </details>
   </main>
 
   <main id="view-inbox" hidden>
