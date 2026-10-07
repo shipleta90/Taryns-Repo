@@ -66,3 +66,14 @@ button.link { flex: none; min-height: 32px; background: none; color: var(--accen
 .composer { position: sticky; bottom: 0; display: flex; gap: 8px; align-items: flex-end; padding: 10px 0 calc(env(safe-area-inset-bottom) + 6px); background: var(--bg); }
 .composer textarea { flex: 1; resize: none; font: inherit; font-size: 16px; padding: 10px 14px; border-radius: 20px; border: 1px solid var(--line); background: var(--card); color: var(--text); max-height: 140px; }
 .composer button { flex: none; min-height: 42px; padding: 0 16px; border-radius: 21px; }
+
+.brief { margin-top: 12px; }
+.brief h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 22px 4px 8px; }
+.brief .sec { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 6px 16px; }
+.brief ul { margin: 0; padding-left: 18px; }
+.brief li { margin: 10px 0; line-height: 1.45; }
+.brief p { margin: 10px 0; line-height: 1.45; }
+.brief a, #msourcelist a { color: var(--accent); text-decoration: none; }
+details.more { margin-top: 24px; }
+details.more summary { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 4px 8px; cursor: pointer; }
+#msourcelist li { font-size: 14px; }

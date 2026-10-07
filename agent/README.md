@@ -3,8 +3,8 @@
 A private assistant that runs on your Mac mini and is used from an iPhone Home Screen web app.
 Data stays on your machine; nothing is exposed to the public internet.
 
-**Status:** chat assistant (Gmail + Calendar), inbox triage and the web app. The morning briefing is
-turned off (`BRIEFING_ENABLED=false`) and no longer shown in the app.
+**Status:** chat assistant (Gmail + Calendar), Chief-of-Staff morning briefing, inbox triage and the
+web app. (The older email-only briefing is turned off: `BRIEFING_ENABLED=false`.)
 Next: house budget (SimpleFIN), grocery lists, appointments from iMessage, Slack drafts.
 
 ## How it's reached (no public domain, no dynamic DNS, no open ports)
@@ -52,7 +52,25 @@ Setup (once): create an API key at console.anthropic.com, then on the Mini run
 `python -m app.secrets set-anthropic-key` (stored in the Keychain). Enable the **Google Calendar API**
 in your Google Cloud project and run `python -m app.auth_google` again to grant Calendar access.
 
-## Morning briefing (off by default)
+## Chief-of-Staff briefing (Briefing tab)
+
+Every morning at `MORNING_AT` (default 06:30) and on demand, Claude writes a seven-part briefing:
+World News Radar, AI & Agentic Operations Breakthroughs, Process Automation & Tooling Pulse, The
+Strategic Play, Newsletter Digest (your Substack emails), Axios: What Matters, and Slack: What You
+Missed (Women Defining AI).
+
+- Sections 1-4 come from live web search and fetch, run server-side by Claude. No personal data is involved.
+- Sections 5-7 are gathered on the Mini: the last day's Substack newsletters and Axios emails from Gmail,
+  and the last day's messages in Slack channels you're in (mentions of you ranked first). Only those
+  items are sent, never other mail or your calendar; anything with an SSN- or card-like number is dropped.
+  Each source fails independently and the briefing says what was unavailable.
+- `MORNING_ABOUT` (one line about you) tailors The Strategic Play.
+- Slack setup: create a Slack app in the workspace with User Token Scopes `channels:read`,
+  `channels:history`, `groups:read`, `groups:history`, `users:read`, install it, then store its User
+  OAuth Token with `python -m app.secrets set-slack-token`.
+- The app renders a small, escaped Markdown subset; only http(s) links become clickable.
+
+## Email-only morning briefing (off by default)
 
 Set `BRIEFING_ENABLED=true` to turn it back on. When on, every morning (`BRIEFING_AT`, default 06:30) and on demand from the app, a **local model on the Mini**
 ([Ollama](https://ollama.com)) reads the last day of mail and writes a short briefing: a few sentences on what

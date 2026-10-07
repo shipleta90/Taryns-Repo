@@ -55,7 +55,7 @@ class FakeMail:
     def search(self, query, limit):
         return list(self.inbox.values())[:limit]
 
-    def read(self, mid):
+    def read(self, mid, body_limit=4000):
         return self.inbox[mid]
 
     def send(self, to, subject, body, reply_to_id=""):
