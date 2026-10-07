@@ -34,6 +34,9 @@ SECTIONS = [
 ]
 NEWSLETTER_QUERY = "newer_than:1d (from:substack.com OR list:substack.com)"
 AXIOS_QUERY = "newer_than:1d from:axios.com"
+# Used when the Slack app isn't connected (e.g. waiting on admin approval): Slack's own
+# notification emails about the Women Defining AI workspace.
+SLACK_EMAIL_QUERY = 'newer_than:1d from:slack.com "Women Defining AI"'
 
 SYSTEM = """You are the user's Chief of Staff, writing their morning briefing. Research with web search and web fetch, then write the briefing.
 
@@ -97,7 +100,9 @@ def gather(gmail, slack) -> dict:
     try:
         client = slack()
         if client is None:
-            data["slack"] = "not connected"
+            emails = _emails(gmail(), SLACK_EMAIL_QUERY, 5, 6000)
+            data["slack"] = ({"source": "Slack notification emails (Slack app not connected)", "emails": emails}
+                             if emails else "not connected, and no Slack notification emails in the last 24 hours")
         else:
             recent = client.recent()
             recent["messages"] = [m for m in recent["messages"] if not privacy.blocked_user_text(m["text"])]
