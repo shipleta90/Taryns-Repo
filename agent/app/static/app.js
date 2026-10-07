@@ -185,7 +185,7 @@ function goalHtml(g) {
       : `<div class="verdict bad">Behind by about ${usd(g.gap_per_month)}/mo. Saving ${usd(g.saving_per_month)}/mo; you need ${usd(g.needed_per_month)}/mo.</div>`;
   return `<div class="kind meta">Down payment + closing by ${esc(new Date(g.target_date + "T12:00").toLocaleDateString([], { month: "long", year: "numeric" }))}</div>
     <div class="big">${usd(g.saved + g.borrow + g.sale_proceeds)} <span class="meta" style="font-size:16px;font-weight:500">of ${usd(g.goal)}</span></div>
-    ${g.borrow || g.sale_proceeds ? `<div class="meta">Cash saved ${usd(g.saved)}${g.sale_proceeds ? ` + condo sale ${usd(g.sale_proceeds)}` : ""}${g.borrow ? ` + securities-backed loan ${usd(g.borrow)}${g.borrow_rate ? ` (≈${usd(g.borrow_monthly_interest)}/mo interest)` : ""}` : ""}</div>` : ""}
+    ${g.borrow || g.sale_proceeds ? `<div class="meta">Cash saved ${usd(g.saved)}${g.sale_proceeds ? ` + condo ${usd(g.sale_proceeds)}` : ""}${g.borrow ? ` + securities-backed loan ${usd(g.borrow)}${g.borrow_rate ? ` (≈${usd(g.borrow_monthly_interest)}/mo interest)` : ""}` : ""}</div>` : ""}
     <div class="bar ok"><span style="width:${Math.min(g.percent, 100)}%"></span></div>
     <div class="goal-grid">
       <div class="stat"><div class="label">Still needed</div><div class="val">${usd(g.remaining)}</div></div>
@@ -193,6 +193,7 @@ function goalHtml(g) {
       <div class="stat"><div class="label">Months left</div><div class="val">${esc(g.months_left)}</div></div>
       <div class="stat"><div class="label">Projected by then</div><div class="val">${usd(g.projected_at_target)}</div></div>
     </div>
+    ${g.condo ? `<div class="meta">Condo: sale ${usd(g.condo.price)} − costs ${usd(g.condo.costs)} − mortgage ${usd(g.condo.loan)}${g.condo.loan_source === "connected account" ? " (updates daily)" : ""} = ${usd(g.condo.net)}</div>` : ""}
     ${verdict}
     <div class="meta" style="margin-top:6px">20% down ${usd(g.down_payment)} · closing ${usd(g.closing_costs)}${g.cushion ? " · cushion " + usd(g.cushion) : ""}</div>`;
 }
@@ -235,6 +236,7 @@ function renderBudget(d) {
       <div class="acct-row"><span class="subject">${esc(a.name)}</span><span>${a.balance == null ? "" : usd(a.balance)}</span></div>
       <div class="meta">${esc(a.org)}${a.hidden ? " · hidden from budget" : ""}</div>
       <div class="acct-btns"><button class="toggle secondary ${a.is_house ? "on" : ""}" data-acct="${esc(a.id)}" data-flag="is_house">${a.is_house ? "House savings ✓" : "Count as house savings"}</button>
+        <button class="toggle secondary ${a.is_condo_loan ? "on" : ""}" data-acct="${esc(a.id)}" data-flag="is_condo_loan">${a.is_condo_loan ? "Condo mortgage ✓" : "Condo mortgage"}</button>
         <button class="toggle secondary" data-acct="${esc(a.id)}" data-flag="hidden">${a.hidden ? "Show" : "Hide"}</button></div></li>`).join("")
     : '<li class="empty">No accounts connected yet.</li>';
 
@@ -252,6 +254,13 @@ function renderBudget(d) {
     $("gdate").value = s.target_date || "2027-05-01";
     $("gborrow").value = s.borrow_amount || "";
     $("gsale").value = s.sale_proceeds || "";
+    $("gcprice").value = s.condo_price || "";
+    $("gccost").value = s.condo_cost_pct != null ? +(s.condo_cost_pct * 100).toFixed(2) : "";
+    $("gcloan").value = s.condo_loan_balance || "";
+    const linked = d.accounts.some((a) => a.is_condo_loan);
+    $("gcloan").disabled = linked;
+    $("gcloanhint").textContent = linked ? "Using your connected mortgage balance (updates daily)."
+      : "Or tap “Condo mortgage” on the loan under Accounts to keep this updated automatically.";
     $("gbrate").value = s.borrow_rate ? +(s.borrow_rate * 100).toFixed(3) : "";
   }
   if (d.running) setTimeout(loadBudget, 4000);
@@ -273,6 +282,8 @@ $("gsave").addEventListener("click", () => {
     cushion: num("gcush") ?? 0, target_date: $("gdate").value || null,
     borrow_amount: num("gborrow") ?? 0, borrow_rate: (num("gbrate") ?? 0) / 100,
     sale_proceeds: num("gsale") ?? 0,
+    condo_price: num("gcprice") ?? 0, condo_cost_pct: (num("gccost") ?? 6) / 100,
+    condo_loan_balance: num("gcloan") ?? 0,
   });
   $("goalsettings").open = false;
 });
