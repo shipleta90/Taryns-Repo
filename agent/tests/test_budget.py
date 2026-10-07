@@ -281,3 +281,10 @@ def test_planned_borrowing_counts_toward_goal_separately():
     assert g["saved"] == 130_000 and g["borrow"] == 50_000
     assert g["remaining"] == 50_000 and g["borrow_monthly_interest"] == 250.0
     assert g["projected_at_target"] == 180_000
+
+
+def test_condo_sale_proceeds_count_toward_goal():
+    g = budget.goal_status({"target_price": 1_000_000, "borrow_amount": 50_000, "sale_proceeds": 50_000,
+                            "target_date": "2027-05-01"}, house_balance=100_000, house_net_90d=None,
+                           today=dt.date(2026, 11, 1))
+    assert g["sale_proceeds"] == 50_000 and g["remaining"] == 30_000 and g["percent"] == round(200 / 230 * 100, 1)

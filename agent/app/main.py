@@ -46,6 +46,7 @@ class BudgetSettings(BaseModel):
     target_date: str | None = None
     borrow_amount: float | None = None     # planned securities-backed loan (or other borrowing)
     borrow_rate: float | None = None       # annual rate as a fraction, e.g. 0.065
+    sale_proceeds: float | None = None     # expected net cash from selling the condo
 
 
 class AccountFlags(BaseModel):

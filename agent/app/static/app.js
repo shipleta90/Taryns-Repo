@@ -179,8 +179,8 @@ function goalHtml(g) {
       ? `<div class="verdict good">On track: saving about ${usd(g.saving_per_month)}/mo; you need ${usd(g.needed_per_month)}/mo.</div>`
       : `<div class="verdict bad">Behind by about ${usd(g.gap_per_month)}/mo. Saving ${usd(g.saving_per_month)}/mo; you need ${usd(g.needed_per_month)}/mo.</div>`;
   return `<div class="kind meta">Down payment + closing by ${esc(new Date(g.target_date + "T12:00").toLocaleDateString([], { month: "long", year: "numeric" }))}</div>
-    <div class="big">${usd(g.saved + g.borrow)} <span class="meta" style="font-size:16px;font-weight:500">of ${usd(g.goal)}</span></div>
-    ${g.borrow ? `<div class="meta">Cash saved ${usd(g.saved)} + securities-backed loan ${usd(g.borrow)}${g.borrow_rate ? ` (≈${usd(g.borrow_monthly_interest)}/mo interest)` : ""}</div>` : ""}
+    <div class="big">${usd(g.saved + g.borrow + g.sale_proceeds)} <span class="meta" style="font-size:16px;font-weight:500">of ${usd(g.goal)}</span></div>
+    ${g.borrow || g.sale_proceeds ? `<div class="meta">Cash saved ${usd(g.saved)}${g.sale_proceeds ? ` + condo sale ${usd(g.sale_proceeds)}` : ""}${g.borrow ? ` + securities-backed loan ${usd(g.borrow)}${g.borrow_rate ? ` (≈${usd(g.borrow_monthly_interest)}/mo interest)` : ""}` : ""}</div>` : ""}
     <div class="bar ok"><span style="width:${Math.min(g.percent, 100)}%"></span></div>
     <div class="goal-grid">
       <div class="stat"><div class="label">Still needed</div><div class="val">${usd(g.remaining)}</div></div>
@@ -246,6 +246,7 @@ function renderBudget(d) {
     $("gcush").value = s.cushion || "";
     $("gdate").value = s.target_date || "2027-05-01";
     $("gborrow").value = s.borrow_amount || "";
+    $("gsale").value = s.sale_proceeds || "";
     $("gbrate").value = s.borrow_rate ? +(s.borrow_rate * 100).toFixed(3) : "";
   }
   if (d.running) setTimeout(loadBudget, 4000);
@@ -266,6 +267,7 @@ $("gsave").addEventListener("click", () => {
     target_price: num("gprice"), down_pct: num("gdown") / 100, closing_pct: num("gclose") / 100,
     cushion: num("gcush") ?? 0, target_date: $("gdate").value || null,
     borrow_amount: num("gborrow") ?? 0, borrow_rate: (num("gbrate") ?? 0) / 100,
+    sale_proceeds: num("gsale") ?? 0,
   });
   $("goalsettings").open = false;
 });
