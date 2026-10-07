@@ -95,3 +95,21 @@ def test_chat_and_approval_endpoints(tmp_path):
         assert c.post(f"/api/proposals/{card['id']}/approve", json={"mode": "send"}, headers=AUTH).status_code == 409
         assert len(mail.sent) == 1
         assert c.post("/api/proposals/999/reject", headers=AUTH).status_code == 404
+
+
+def test_morning_endpoints(tmp_path):
+    import time
+    from tests.test_assistant import FakeClaude
+    from tests.test_morning import FULL, Mail, final
+    s = Settings(token="secret", dry_run=True, max_trash_per_run=1, lookback_days=1, triage_at="",
+                 data_dir=tmp_path, briefing_at="", morning_at="")
+    with TestClient(create_app(s, gmail=Mail({}), llm=FakeLLM(), claude=FakeClaude([final(FULL)]))) as c:
+        assert c.get("/api/morning").status_code == 401
+        assert c.get("/api/morning", headers=AUTH).json()["briefing"] is None
+        assert c.post("/api/morning/run", headers=AUTH).status_code == 202
+        for _ in range(50):
+            res = c.get("/api/morning", headers=AUTH).json()
+            if res["briefing"] and not res["running"]:
+                break
+            time.sleep(0.05)
+        assert res["error"] is None and res["briefing"]["markdown"] == FULL

@@ -14,6 +14,7 @@ from . import service
 from .config import Settings, load_settings
 from .db import Database
 from . import briefing as briefing_mod
+from . import morning as morning_mod
 from .assistant import Assistant
 from .llm import LocalLLM
 from .scheduler import daily
@@ -35,7 +36,7 @@ class ApproveRequest(BaseModel):
 
 
 def create_app(settings: Settings | None = None, gmail=None, db: Database | None = None,
-               llm: LocalLLM | None = None, calendar=None, claude=None) -> FastAPI:
+               llm: LocalLLM | None = None, calendar=None, claude=None, slack=None) -> FastAPI:
     settings = settings or load_settings()
     db = db or Database(settings.db_path)
     if not settings.token:
@@ -64,7 +65,7 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
             calendar = GoogleCalendar(load_credentials(require=CALENDAR_SCOPE), settings.timezone)
         return calendar
 
-    def get_assistant() -> Assistant:
+    def get_claude():
         nonlocal claude
         if claude is None:
             from .secrets import anthropic_key
@@ -74,7 +75,38 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
                                    "python -m app.secrets set-anthropic-key")
             import anthropic
             claude = anthropic.Anthropic(api_key=key)
-        return Assistant(claude, db, get_gmail, get_calendar, settings)
+        return claude
+
+    def get_slack():
+        nonlocal slack
+        if slack is None:
+            from .secrets import slack_token
+            from .slack_client import SlackClient
+            token = slack_token()
+            if not token:
+                return None
+            slack = SlackClient(token)
+        return slack
+
+    def get_assistant() -> Assistant:
+        return Assistant(get_claude(), db, get_gmail, get_calendar, settings)
+
+    morning_state = {"running": False, "error": None}
+
+    async def run_morning():
+        if morning_state["running"]:
+            return
+        morning_state.update(running=True, error=None)
+        try:
+            gathered = await asyncio.to_thread(morning_mod.gather, get_gmail, get_slack)
+            await asyncio.to_thread(morning_mod.build, get_claude(), db, settings.claude_model,
+                                    settings.morning_effort, settings.timezone, settings.morning_about,
+                                    gathered)
+        except Exception as exc:  # shown in the app; never crashes the server
+            log.exception("morning briefing failed")
+            morning_state["error"] = str(exc)[:300]
+        finally:
+            morning_state["running"] = False
 
     chat_lock = asyncio.Lock()
     triage_lock = asyncio.Lock()
@@ -104,6 +136,8 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
             async def nightly():
                 await run_locked(None)
             tasks.append(asyncio.create_task(daily(settings.triage_at, nightly)))
+        if settings.morning_at:
+            tasks.append(asyncio.create_task(daily(settings.morning_at, run_morning)))
         if settings.briefing_enabled and settings.briefing_at:
             tasks.append(asyncio.create_task(daily(settings.briefing_at, run_briefing)))
         yield
@@ -150,6 +184,16 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
     async def start_briefing():
         if not briefing_state["running"]:
             asyncio.create_task(run_briefing())
+        return {"started": True}
+
+    @app.get("/api/morning", dependencies=[Depends(require_auth)])
+    def get_morning():
+        return {"briefing": db.latest_morning(), **morning_state, "schedule": settings.morning_at or None}
+
+    @app.post("/api/morning/run", status_code=202, dependencies=[Depends(require_auth)])
+    async def start_morning():
+        if not morning_state["running"]:
+            asyncio.create_task(run_morning())
         return {"started": True}
 
     @app.get("/api/chat", dependencies=[Depends(require_auth)])

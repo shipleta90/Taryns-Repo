@@ -101,6 +101,68 @@ $("actions").addEventListener("click", async (ev) => {
   refresh();
 });
 
+// ---- Chief-of-Staff briefing ------------------------------------------------------------
+// A tiny, safe Markdown subset: everything is escaped first; only http(s) links become <a>.
+function inline(text) {
+  return esc(text)
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+}
+
+function mdToHtml(md) {
+  const out = [];
+  let list = false, open = false;
+  const closeList = () => { if (list) { out.push("</ul>"); list = false; } };
+  const closeSec = () => { closeList(); if (open) { out.push("</div>"); open = false; } };
+  for (const raw of md.split("\n")) {
+    const line = raw.trim();
+    if (!line) { closeList(); continue; }
+    const h = line.match(/^#{1,3}\s+(.*)$/);
+    const li = line.match(/^(?:[-*•]|\d+\.)\s+(.*)$/);
+    if (h) { closeSec(); out.push(`<h3>${inline(h[1])}</h3><div class="sec">`); open = true; }
+    else if (li) { if (!open) { out.push('<div class="sec">'); open = true; } if (!list) { out.push("<ul>"); list = true; } out.push(`<li>${inline(li[1])}</li>`); }
+    else { closeList(); if (!open) { out.push('<div class="sec">'); open = true; } out.push(`<p>${inline(line)}</p>`); }
+  }
+  closeSec();
+  return out.join("");
+}
+
+let morningTimer = null;
+function renderMorning(res) {
+  const b = res.briefing;
+  $("mstatus").innerHTML = res.running
+    ? "Researching and writing your briefing… this takes a few minutes."
+    : b ? `Briefing from <strong>${ago(b.created_at)}</strong>${res.schedule ? ` · daily at ${esc(res.schedule)}` : ""}`
+      : "No briefing yet. Tap Refresh briefing.";
+  const note = res.error ? "Last attempt failed: " + res.error : (b && b.note) || "";
+  $("mnote").hidden = !note;
+  $("mnote").textContent = note;
+  $("mrefresh").disabled = !!res.running;
+  $("mbody").innerHTML = b ? mdToHtml(b.markdown) : "";
+  const sources = (b && b.sources) || [];
+  $("msources").hidden = !sources.length;
+  $("msourcelist").innerHTML = sources.map((x) =>
+    `<li><a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.title)}</a></li>`).join("");
+}
+
+async function loadMorning() {
+  try {
+    const res = await api("/api/morning");
+    store.set("mcache", JSON.stringify(res));
+    renderMorning(res);
+    clearTimeout(morningTimer);
+    if (res.running) morningTimer = setTimeout(loadMorning, 5000);
+  } catch (e) {
+    if (e.message !== "unauthorized") $("mstatus").textContent = "Can't reach your Mac mini. Is Tailscale on?";
+  }
+}
+
+$("mrefresh").addEventListener("click", async () => {
+  $("mrefresh").disabled = true;
+  try { await api("/api/morning/run", { method: "POST" }); } catch (e) { alert(e.message); }
+  loadMorning();
+});
+
 // ---- Chat ---------------------------------------------------------------------------------
 let chatBusy = false;
 
@@ -206,9 +268,11 @@ $("chat-log").addEventListener("click", async (ev) => {
 
 function showTab(name) {
   $("view-chat").hidden = name !== "chat";
+  $("view-morning").hidden = name !== "morning";
   $("view-inbox").hidden = name !== "inbox";
-  $("title").textContent = { chat: "Chat", inbox: "Inbox" }[name];
+  $("title").textContent = { chat: "Chat", morning: "Briefing", inbox: "Inbox" }[name];
   if (name === "chat") loadChat();
+  if (name === "morning") loadMorning();
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === name));
   store.set("tab", name);
 }
@@ -220,7 +284,11 @@ try {
   if (c) { renderStatus(c.st); renderActions(c.rows); }
 } catch { /* ignore bad cache */ }
 const savedTab = store.get("tab");
-showTab(savedTab === "inbox" ? "inbox" : "chat");
+try {
+  const mc = JSON.parse(store.get("mcache") || "null");
+  if (mc) renderMorning(mc);
+} catch { /* ignore bad cache */ }
+showTab(["chat", "morning", "inbox"].includes(savedTab) ? savedTab : "chat");
 if (!store.get("token")) askToken();
 refresh();
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});

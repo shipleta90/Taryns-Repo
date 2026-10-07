@@ -1,6 +1,7 @@
 """Secrets kept in the macOS Keychain, not in files.
 
     python -m app.secrets set-anthropic-key     # paste your key when asked (input is hidden)
+    python -m app.secrets set-slack-token       # your Slack app's User OAuth Token (xoxp-...)
 """
 import getpass
 import os
@@ -8,26 +9,42 @@ import sys
 
 SERVICE = "personal-agent"
 ANTHROPIC = "anthropic-api-key"
+SLACK = "slack-user-token"
+
+# command -> (keychain account, prompt, required prefix)
+COMMANDS = {
+    "set-anthropic-key": (ANTHROPIC, "Paste your Anthropic API key (hidden): ", "sk-ant-"),
+    "set-slack-token": (SLACK, "Paste your Slack User OAuth Token (hidden): ", "xoxp-"),
+}
 
 
-def anthropic_key() -> str | None:
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        return os.environ["ANTHROPIC_API_KEY"]
+def _get(account: str, env: str) -> str | None:
+    if os.environ.get(env):
+        return os.environ[env]
     try:
         import keyring
-        return keyring.get_password(SERVICE, ANTHROPIC)
+        return keyring.get_password(SERVICE, account)
     except Exception:  # no keyring backend (e.g. tests, Linux CI)
         return None
 
 
+def anthropic_key() -> str | None:
+    return _get(ANTHROPIC, "ANTHROPIC_API_KEY")
+
+
+def slack_token() -> str | None:
+    return _get(SLACK, "SLACK_USER_TOKEN")
+
+
 def main() -> None:
-    if sys.argv[1:] != ["set-anthropic-key"]:
-        raise SystemExit("usage: python -m app.secrets set-anthropic-key")
+    if len(sys.argv) != 2 or sys.argv[1] not in COMMANDS:
+        raise SystemExit("usage: python -m app.secrets " + " | ".join(COMMANDS))
     import keyring
-    key = getpass.getpass("Paste your Anthropic API key (hidden): ").strip()
-    if not key.startswith("sk-ant-"):
-        raise SystemExit("That doesn't look like an Anthropic API key (should start with sk-ant-).")
-    keyring.set_password(SERVICE, ANTHROPIC, key)
+    account, prompt, prefix = COMMANDS[sys.argv[1]]
+    value = getpass.getpass(prompt).strip()
+    if not value.startswith(prefix):
+        raise SystemExit(f"That doesn't look right (it should start with {prefix}).")
+    keyring.set_password(SERVICE, account, value)
     print("Saved to the macOS Keychain. Restart the agent to use it.")
 
 

@@ -59,6 +59,14 @@ CREATE TABLE IF NOT EXISTS proposals (
     noted INTEGER NOT NULL DEFAULT 0,  -- outcome already reported back to the model
     created_at REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS morning (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at REAL NOT NULL,
+    model TEXT NOT NULL,
+    markdown TEXT NOT NULL,
+    sources_json TEXT NOT NULL,
+    note TEXT
+);
 CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     started_at REAL NOT NULL,
@@ -252,3 +260,20 @@ class Database:
     def mark_noted(self, ids: list[int]) -> None:
         with self.conn:
             self.conn.executemany("UPDATE proposals SET noted=1 WHERE id=?", [(i,) for i in ids])
+
+    # chief-of-staff morning briefing
+    def save_morning(self, model: str, markdown: str, sources: list[dict], note: str | None = None) -> int:
+        with self.conn:
+            cur = self.conn.execute(
+                "INSERT INTO morning(created_at, model, markdown, sources_json, note) VALUES (?,?,?,?,?)",
+                (time.time(), model, markdown, json.dumps(sources), note),
+            )
+        return int(cur.lastrowid)
+
+    def latest_morning(self) -> dict | None:
+        row = self.conn.execute("SELECT * FROM morning ORDER BY id DESC LIMIT 1").fetchone()
+        if not row:
+            return None
+        out = dict(row)
+        out["sources"] = json.loads(out.pop("sources_json"))
+        return out
