@@ -1,12 +1,13 @@
 """FastAPI app. Bind it to 127.0.0.1 and expose it only through `tailscale serve`."""
 import asyncio
+import hashlib
 import contextlib
 import logging
 import secrets
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -146,6 +147,15 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
 
     app = FastAPI(title="Personal Agent", lifespan=lifespan, docs_url=None, redoc_url=None)
 
+    @app.middleware("http")
+    async def no_stale_app(request, call_next):
+        # Make the phone re-check the app's files on every load (a cheap 304 when unchanged).
+        # Without this, iOS can keep an old app.js after an update and pair it with new HTML.
+        response = await call_next(request)
+        if not request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
     @app.get("/api/health")
     def health():
         return {"ok": True}
@@ -247,7 +257,12 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
 
     @app.get("/")
     def index():
-        return FileResponse(STATIC / "index.html")
+        # Version the asset URLs by file contents, so a new app.js is never confused with an old one.
+        html = (STATIC / "index.html").read_text()
+        for name in ("style.css", "app.js"):
+            digest = hashlib.sha256((STATIC / name).read_bytes()).hexdigest()[:10]
+            html = html.replace(f"/static/{name}\"", f"/static/{name}?v={digest}\"")
+        return HTMLResponse(html)
 
     @app.get("/sw.js")
     def sw():  # served from root so its scope covers the whole app
