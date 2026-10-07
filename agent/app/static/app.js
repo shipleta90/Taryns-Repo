@@ -168,6 +168,11 @@ const usd = (n, cents) => (n == null ? "—" : Number(n).toLocaleString("en-US",
   { style: "currency", currency: "USD", maximumFractionDigits: cents ? 2 : 0, minimumFractionDigits: cents ? 2 : 0 }));
 let budgetData = null;
 
+function categoryOptions(selected) {
+  const names = (budgetData ? budgetData.category_names : []).concat(["Income", "Transfer"]);
+  return names.map((c) => `<option ${c === selected ? "selected" : ""}>${esc(c)}</option>`).join("");
+}
+
 function goalHtml(g) {
   if (!g) {
     return `<div class="summary">Set your target home price to see if you're on track.</div>
@@ -221,10 +226,8 @@ function renderBudget(d) {
       <div class="txns" hidden></div></li>`).join("") : '<li class="empty">No spending yet this month.</li>';
 
   $("uncat-wrap").hidden = !d.uncategorized.length;
-  const opts = (sel) => d.category_names.concat(["Income", "Transfer"]).map((c) =>
-    `<option ${c === sel ? "selected" : ""}>${esc(c)}</option>`).join("");
   $("uncat").innerHTML = d.uncategorized.map((m) => `<li><div class="acct-row"><span class="subject">${esc(m)}</span>
-      <select class="recat" data-merchant="${esc(m)}"><option value="">Choose…</option>${opts("")}</select></div></li>`).join("");
+      <select class="recat" data-merchant="${esc(m)}"><option value="">Choose…</option>${categoryOptions("")}</select></div></li>`).join("");
 
   $("accts").innerHTML = d.accounts.length ? d.accounts.map((a) => `<li>
       <div class="acct-row"><span class="subject">${esc(a.name)}</span><span>${a.balance == null ? "" : usd(a.balance)}</span></div>
@@ -281,12 +284,14 @@ $("view-budget").addEventListener("click", async (ev) => {
     const cur = budgetData.categories.find((c) => c.category === t.dataset.cat);
     const v = prompt(`Monthly limit for ${t.dataset.cat} (leave empty to remove):`, cur && cur.limit ? cur.limit : "");
     if (v !== null) budgetPost("/api/budget/limits", { category: t.dataset.cat, monthly_limit: v === "" ? null : Number(v) });
-  } else if (t.closest(".cat-row") && !t.closest("button") && !t.closest(".txns")) {
+  } else if (t.closest(".cat-row") && !t.closest("button") && !t.closest(".txns") && !t.closest("select")) {
     const row = t.closest(".cat-row"), box = row.querySelector(".txns");
     if (!box.hidden) { box.hidden = true; return; }
     try {
       const rows = await api(`/api/budget/transactions?month=${budgetData.month}&category=${encodeURIComponent(row.dataset.cat)}`);
-      box.innerHTML = rows.map((r) => `<div><span>${esc(r.date.slice(5))} ${esc(r.merchant)}</span><span>${usd(-r.amount, true)}</span></div>`).join("") || "<div>No transactions.</div>";
+      box.innerHTML = rows.map((r) => `<div class="txn"><span>${esc(r.date.slice(5))} ${esc(r.merchant)}</span><span>${usd(-r.amount, true)}</span></div>
+        <div class="txn-cat"><select class="recat" data-merchant="${esc(r.merchant)}" aria-label="Category for ${esc(r.merchant)}">${categoryOptions(r.category)}</select></div>`).join("")
+        || "<div>No transactions.</div>";
       box.hidden = false;
     } catch (e) { alert(e.message); }
   }

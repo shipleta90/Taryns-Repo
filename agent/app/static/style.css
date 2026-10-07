@@ -92,7 +92,7 @@ details.more summary { font-size: 13px; text-transform: uppercase; letter-spacin
 .cut-row .amt { flex: none; font-weight: 700; white-space: nowrap; }
 .form { display: grid; gap: 10px; }
 .form label { display: grid; gap: 4px; font-size: 14px; color: var(--muted); }
-.form input, .list select { font: inherit; font-size: 16px; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+.form input, .list select, .txns select { font: inherit; font-size: 16px; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
 .toggle { flex: none; min-height: 32px; font-size: 13px; padding: 0 10px; border-radius: 999px; }
 .toggle.on { background: var(--ok); color: #fff; }
 .acct-row, .cat-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -100,4 +100,5 @@ details.more summary { font-size: 13px; text-transform: uppercase; letter-spacin
 .acct-btns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 .cat-row { cursor: pointer; }
 .txns { font-size: 13px; color: var(--muted); margin-top: 8px; display: grid; gap: 4px; }
-.txns div { display: flex; justify-content: space-between; gap: 8px; }
+.txns .txn { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; }
+.txns .txn-cat select { font-size: 14px; padding: 4px 8px; }
