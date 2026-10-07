@@ -189,9 +189,10 @@ def goal_status(settings: dict, house_balance: float, house_net_90d: float | Non
     cushion = float(settings.get("cushion") or 0)
     borrow = max(float(settings.get("borrow_amount") or 0), 0.0)     # e.g. a securities-backed line of credit
     borrow_rate = float(settings.get("borrow_rate") or 0)
+    sale = max(float(settings.get("sale_proceeds") or 0), 0.0)        # net cash from selling a home
     target = dt.date.fromisoformat(settings.get("target_date") or "2027-05-01")
     goal = round(price * (down_pct + closing_pct) + cushion, 2)
-    funded = house_balance + borrow
+    funded = house_balance + borrow + sale
     remaining = max(goal - funded, 0.0)
     months = months_between(today, target)
     needed = round(remaining / months, 2) if months >= 0.5 else round(remaining, 2)
@@ -200,7 +201,7 @@ def goal_status(settings: dict, house_balance: float, house_net_90d: float | Non
     return {
         "goal": goal, "down_payment": round(price * down_pct, 2), "closing_costs": round(price * closing_pct, 2),
         "cushion": cushion, "saved": round(house_balance, 2), "remaining": round(remaining, 2),
-        "borrow": round(borrow, 2), "borrow_rate": borrow_rate,
+        "borrow": round(borrow, 2), "borrow_rate": borrow_rate, "sale_proceeds": round(sale, 2),
         "borrow_monthly_interest": round(borrow * borrow_rate / 12, 2),
         "percent": round(min(funded / goal, 1.0) * 100, 1) if goal else 0.0,
         "months_left": round(months, 1), "target_date": target.isoformat(), "needed_per_month": needed,
