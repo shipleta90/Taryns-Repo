@@ -46,12 +46,16 @@ class BudgetSettings(BaseModel):
     target_date: str | None = None
     borrow_amount: float | None = None     # planned securities-backed loan (or other borrowing)
     borrow_rate: float | None = None       # annual rate as a fraction, e.g. 0.065
-    sale_proceeds: float | None = None     # expected net cash from selling the condo
+    sale_proceeds: float | None = None     # expected net cash from selling the condo (if no price given)
+    condo_price: float | None = None       # expected condo sale price
+    condo_cost_pct: float | None = None    # selling costs as a fraction, e.g. 0.06
+    condo_loan_balance: float | None = None  # used when the mortgage account isn't connected
 
 
 class AccountFlags(BaseModel):
     is_house: bool | None = None
     hidden: bool | None = None
+    is_condo_loan: bool | None = None
 
 
 class LimitRequest(BaseModel):
@@ -287,7 +291,7 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
                 dt.date.fromisoformat(values["target_date"])
             except ValueError:
                 raise HTTPException(status_code=400, detail="target_date must be YYYY-MM-DD")
-        for k in ("down_pct", "closing_pct", "borrow_rate"):
+        for k in ("down_pct", "closing_pct", "borrow_rate", "condo_cost_pct"):
             if k in values and not 0 <= values[k] <= 1:
                 raise HTTPException(status_code=400, detail=f"{k} must be between 0 and 1")
         db.set_fin_settings(values)
@@ -295,7 +299,7 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
 
     @app.post("/api/budget/accounts/{account_id}", dependencies=[Depends(require_auth)])
     def budget_account(account_id: str, req: AccountFlags):
-        if not db.set_fin_account_flags(account_id, req.is_house, req.hidden):
+        if not db.set_fin_account_flags(account_id, req.is_house, req.hidden, req.is_condo_loan):
             raise HTTPException(status_code=404, detail="no such account")
         return budget_service.summary(db)
 

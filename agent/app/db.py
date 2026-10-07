@@ -76,7 +76,8 @@ CREATE TABLE IF NOT EXISTS fin_accounts (
     balance_date REAL,
     source TEXT NOT NULL,         -- simplefin | csv
     is_house INTEGER NOT NULL DEFAULT 0,
-    hidden INTEGER NOT NULL DEFAULT 0
+    hidden INTEGER NOT NULL DEFAULT 0,
+    is_condo_loan INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS fin_txns (
     id TEXT PRIMARY KEY,
@@ -124,6 +125,10 @@ class Database:
         if "overview" not in cols:  # databases created before the overview existed
             with self.conn:
                 self.conn.execute("ALTER TABLE briefings ADD COLUMN overview TEXT")
+        acct_cols = {r["name"] for r in self.conn.execute("PRAGMA table_info(fin_accounts)")}
+        if "is_condo_loan" not in acct_cols:
+            with self.conn:
+                self.conn.execute("ALTER TABLE fin_accounts ADD COLUMN is_condo_loan INTEGER NOT NULL DEFAULT 0")
 
     # engaged senders (refreshed weekly; timestamp lives in meta so an empty set still counts)
     def replace_engaged(self, domains: Iterable[str], addresses: Iterable[str]) -> None:
@@ -324,11 +329,15 @@ class Database:
     def fin_accounts(self) -> list[dict]:
         return [dict(r) for r in self.conn.execute("SELECT * FROM fin_accounts ORDER BY org, name")]
 
-    def set_fin_account_flags(self, account_id: str, is_house: bool | None, hidden: bool | None) -> bool:
+    def set_fin_account_flags(self, account_id: str, is_house: bool | None, hidden: bool | None,
+                              is_condo_loan: bool | None = None) -> bool:
+        def flag(v):
+            return None if v is None else int(v)
         with self.conn:
             cur = self.conn.execute(
-                "UPDATE fin_accounts SET is_house=COALESCE(?, is_house), hidden=COALESCE(?, hidden) WHERE id=?",
-                (None if is_house is None else int(is_house), None if hidden is None else int(hidden), account_id))
+                "UPDATE fin_accounts SET is_house=COALESCE(?, is_house), hidden=COALESCE(?, hidden),"
+                " is_condo_loan=COALESCE(?, is_condo_loan) WHERE id=?",
+                (flag(is_house), flag(hidden), flag(is_condo_loan), account_id))
         return cur.rowcount == 1
 
     def add_fin_txns(self, txns: list[dict]) -> int:

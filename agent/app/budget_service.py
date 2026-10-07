@@ -95,8 +95,13 @@ def summary(db: Database, today: dt.date | None = None) -> dict:
     ninety = (dt.datetime.combine(today, dt.time.min) - dt.timedelta(days=90)).timestamp()
     house_txns = [t for t in txns if t["is_house"] and t["posted"] >= ninety]
     house_net = sum(t["amount"] for t in house_txns) if house_txns else None
-    goal = budget.goal_status(settings, house_balance, house_net, today) if house else (
-        budget.goal_status(settings, 0.0, None, today))
+    condo_loans = [a for a in accounts if a["is_condo_loan"] and a["balance"] is not None]
+    # A connected mortgage account updates daily, so paying it down raises the condo cash automatically.
+    loan = sum(abs(a["balance"]) for a in condo_loans) if condo_loans else None
+    condo = budget.condo_proceeds(settings, loan)
+    if condo:
+        condo["loan_source"] = "connected account" if condo_loans else "entered"
+    goal = budget.goal_status(settings, house_balance, house_net if house else None, today, condo)
 
     months_left = goal["months_left"] if goal else 0
     recurring = [{"merchant": r.merchant, "category": r.category, "monthly": r.monthly, "yearly": r.yearly,
@@ -125,7 +130,8 @@ def summary(db: Database, today: dt.date | None = None) -> dict:
         "last_sync": settings.get("_last_sync"), "sync_errors": settings.get("_sync_errors", []),
         "settings": {k: v for k, v in settings.items() if not k.startswith("_")},
         "goal": goal,
-        "accounts": [{k: a[k] for k in ("id", "org", "name", "balance", "source", "is_house", "hidden")}
+        "accounts": [{k: a[k] for k in ("id", "org", "name", "balance", "source", "is_house", "hidden",
+                                        "is_condo_loan")}
                      for a in accounts],
         "cuts": {"recurring": recurring, "running_hot": budget.running_hot(txns, today)},
         "month": month, "categories": categories, "average_months": avg_months, "category_names": budget.SPEND_CATEGORIES,

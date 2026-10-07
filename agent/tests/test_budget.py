@@ -311,3 +311,36 @@ def test_summary_shows_averages_and_suggested_limits(db):
                                  "balance_date": 0}], txns), db, FakeLLM())
     row = next(c for c in budget_service.summary(db)["categories"] if c["category"] == "Dining")
     assert row["average"] == 400.0 and row["suggested_limit"] == 360 and row["spent"] == 0
+
+
+def test_condo_proceeds_from_price_costs_and_loan():
+    c = budget.condo_proceeds({"condo_price": 800_000, "condo_cost_pct": 0.06, "condo_loan_balance": 600_000}, None)
+    assert c == {"price": 800_000, "costs": 48_000, "cost_pct": 0.06, "loan": 600_000, "net": 152_000}
+    assert budget.condo_proceeds({"condo_price": 800_000}, -590_000)["net"] == 162_000   # connected loan wins
+    assert budget.condo_proceeds({"sale_proceeds": 50_000}, None) is None
+
+
+def test_connected_condo_mortgage_drives_the_goal(db):
+    accounts = [{"id": "sf:mort", "org": "Wells Fargo", "name": "Condo mortgage", "balance": -600_000, "balance_date": 0}]
+    budget_service.sync(FakeSF(accounts, []), db, FakeLLM())
+    db.set_fin_settings({"target_price": 1_000_000, "condo_price": 800_000, "condo_loan_balance": 999_999,
+                         "sale_proceeds": 50_000})
+    db.set_fin_account_flags("sf:mort", None, None, is_condo_loan=True)
+    g = budget_service.summary(db)["goal"]
+    assert g["condo"]["loan"] == 600_000 and g["condo"]["loan_source"] == "connected account"
+    assert g["sale_proceeds"] == 152_000           # computed value replaces the typed $50k
+    db.set_fin_account_flags("sf:mort", None, None, is_condo_loan=False)
+    assert budget_service.summary(db)["goal"]["condo"]["loan"] == 999_999   # falls back to the entered balance
+
+
+def test_old_database_gets_condo_column(tmp_path):
+    import sqlite3
+    path = tmp_path / "old.sqlite3"
+    con = sqlite3.connect(path)
+    con.execute("CREATE TABLE fin_accounts (id TEXT PRIMARY KEY, org TEXT NOT NULL DEFAULT '', name TEXT NOT NULL,"
+                " currency TEXT NOT NULL DEFAULT 'USD', balance REAL, balance_date REAL, source TEXT NOT NULL,"
+                " is_house INTEGER NOT NULL DEFAULT 0, hidden INTEGER NOT NULL DEFAULT 0)")
+    con.commit(); con.close()
+    db = Database(path)
+    db.upsert_fin_account({"id": "a", "name": "x"}, "csv")
+    assert db.set_fin_account_flags("a", None, None, is_condo_loan=True)
