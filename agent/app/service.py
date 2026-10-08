@@ -36,7 +36,7 @@ def run_triage(gmail: GmailClient, db: Database, settings: Settings,
     examined = trashed = capped = 0
     try:
         engaged = _engaged(gmail, db)
-        for msg in gmail.list_new_messages(settings.lookback_days):
+        for msg in gmail.list_new_messages(settings.lookback_hours):
             examined += 1
             decision = decide(msg, engaged)
             action = decision.action

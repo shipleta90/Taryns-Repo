@@ -87,8 +87,11 @@ def decide(msg: Message, engaged: EngagedSet) -> Decision:
     sens = safety.assess(f"{msg.subject}\n{msg.snippet}", domain)
     if sens.sensitive:
         return Decision(Action.SKIP, "sensitive: " + ",".join(sens.reasons))
-    if msg.labels & PROTECTED_LABELS:
-        return Decision(Action.SKIP, "protected label: " + ",".join(sorted(msg.labels & PROTECTED_LABELS)))
+    protected = msg.labels & PROTECTED_LABELS
+    if PROMO_LABEL in msg.labels:
+        protected = protected - {"IMPORTANT"}   # Gmail marks lots of marketing "important"
+    if protected:
+        return Decision(Action.SKIP, "protected label: " + ",".join(sorted(protected)))
     if msg.thread_has_user_reply:
         return Decision(Action.SKIP, "you replied in this thread")
     if not sender:

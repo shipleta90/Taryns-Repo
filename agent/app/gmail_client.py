@@ -6,6 +6,7 @@ with this scope. That is a deliberate safety property: nothing here can destroy 
 """
 from __future__ import annotations
 
+import time
 from typing import Protocol
 
 from .domains import engagement_domain, parse_addresses
@@ -23,8 +24,16 @@ SCOPES = [
 ]
 
 
+def triage_query(lookback_hours: int, now: float | None = None) -> str:
+    """Unseen mail from the last N hours, in the inbox or in the Promotions category (which also
+    catches promos a filter moved out of the inbox). Never the backlog."""
+    since = int((now if now is not None else time.time()) - lookback_hours * 3600)
+    seen = SEEN_LABEL.lower().replace("/", "-")   # Gmail search spells nested labels with hyphens
+    return f"after:{since} -label:{seen} (in:inbox OR category:promotions)"
+
+
 class GmailClient(Protocol):
-    def list_new_messages(self, lookback_days: int) -> list[Message]: ...
+    def list_new_messages(self, lookback_hours: int) -> list[Message]: ...
     def recent_messages(self, lookback_days: int, limit: int) -> list[Message]: ...
     def message_text(self, message_id: str) -> str: ...
     def search(self, query: str, limit: int) -> list[dict]: ...
@@ -102,10 +111,8 @@ class GoogleGmail:
             thread_has_user_reply=replied,
         )
 
-    def list_new_messages(self, lookback_days: int) -> list[Message]:
-        # Only unseen inbox mail within the lookback window: future-forward, no backlog sweep.
-        query = f'in:inbox newer_than:{lookback_days}d -label:"{SEEN_LABEL}"'
-        return [self._to_message(ref["id"]) for ref in self._ids(query, limit=200)]
+    def list_new_messages(self, lookback_hours: int) -> list[Message]:
+        return [self._to_message(ref["id"]) for ref in self._ids(triage_query(lookback_hours), limit=200)]
 
     def recent_messages(self, lookback_days: int, limit: int) -> list[Message]:
         """Recent inbox mail (seen or not) for the briefing. Read-only."""

@@ -13,7 +13,7 @@ AUTH = {"Authorization": "Bearer secret"}
 
 @pytest.fixture
 def client(tmp_path):
-    s = Settings(token="secret", dry_run=False, max_trash_per_run=25, lookback_days=2,
+    s = Settings(token="secret", dry_run=False, max_trash_per_run=25, lookback_hours=24,
                  triage_at="", data_dir=tmp_path)
     app = create_app(s, gmail=FakeGmail([promo(1)]), llm=FakeLLM())
     with TestClient(app) as c:
@@ -28,7 +28,7 @@ def test_requires_token(client):
 
 
 def test_refuses_to_start_without_token(tmp_path):
-    s = Settings(token="", dry_run=True, max_trash_per_run=1, lookback_days=1, triage_at="", data_dir=tmp_path)
+    s = Settings(token="", dry_run=True, max_trash_per_run=1, lookback_hours=24, triage_at="", data_dir=tmp_path)
     with pytest.raises(RuntimeError):
         create_app(s)
 
@@ -74,7 +74,7 @@ def test_briefing_endpoints(client):
 def test_chat_without_api_key_explains_setup(tmp_path, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setattr("app.secrets.anthropic_key", lambda: None)
-    s = Settings(token="secret", dry_run=True, max_trash_per_run=1, lookback_days=1, triage_at="",
+    s = Settings(token="secret", dry_run=True, max_trash_per_run=1, lookback_hours=24, triage_at="",
                  data_dir=tmp_path, briefing_at="")
     with TestClient(create_app(s, gmail=FakeGmail([]), llm=FakeLLM())) as c:
         assert "set-anthropic-key" in c.get("/api/chat", headers=AUTH).json()["setup"]
@@ -83,7 +83,7 @@ def test_chat_without_api_key_explains_setup(tmp_path, monkeypatch):
 
 def test_chat_and_approval_endpoints(tmp_path):
     from tests.test_assistant import FakeCal, FakeClaude, FakeMail, text, tool
-    s = Settings(token="secret", dry_run=True, max_trash_per_run=1, lookback_days=1, triage_at="",
+    s = Settings(token="secret", dry_run=True, max_trash_per_run=1, lookback_hours=24, triage_at="",
                  data_dir=tmp_path, briefing_at="")
     mail = FakeMail()
     claude = FakeClaude([tool("propose_email", {"to": ["a@b.com"], "subject": "s", "body": "b",
@@ -104,7 +104,7 @@ def test_morning_endpoints(tmp_path):
     import time
     from tests.test_assistant import FakeClaude
     from tests.test_morning import FULL, Mail, final
-    s = Settings(token="secret", dry_run=True, max_trash_per_run=1, lookback_days=1, triage_at="",
+    s = Settings(token="secret", dry_run=True, max_trash_per_run=1, lookback_hours=24, triage_at="",
                  data_dir=tmp_path, briefing_at="", morning_at="")
     with TestClient(create_app(s, gmail=Mail({}), llm=FakeLLM(), claude=FakeClaude([final(FULL)]))) as c:
         assert c.get("/api/morning").status_code == 401

@@ -24,7 +24,7 @@ class Settings:
     token: str
     dry_run: bool
     max_trash_per_run: int
-    lookback_days: int
+    lookback_hours: int
     triage_at: str
     data_dir: Path
     ollama_url: str = "http://127.0.0.1:11434"
@@ -54,7 +54,8 @@ def load_settings() -> Settings:
         # Default to dry run: a misconfigured install must never delete anything.
         dry_run=_bool(os.environ.get("TRIAGE_DRY_RUN", "true")),
         max_trash_per_run=int(os.environ.get("TRIAGE_MAX_TRASH_PER_RUN", "25")),
-        lookback_days=int(os.environ.get("TRIAGE_LOOKBACK_DAYS", "2")),
+        # Only mail from the last N hours is triaged (exact window, not calendar days).
+        lookback_hours=int(os.environ.get("TRIAGE_LOOKBACK_HOURS", "24")),
         triage_at=os.environ.get("TRIAGE_AT", "02:30"),
         data_dir=data_dir,
         ollama_url=os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434"),
