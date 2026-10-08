@@ -1,0 +1,215 @@
+"""Gmail access. `GmailClient` is the interface the rest of the app uses; `GoogleGmail` is the
+real implementation. Tests use an in-memory fake.
+
+Scope is gmail.modify: it can read, label and TRASH, but Google refuses permanent deletion
+with this scope. That is a deliberate safety property: nothing here can destroy mail.
+"""
+from __future__ import annotations
+
+import time
+from typing import Protocol
+
+from .domains import engagement_domain, parse_addresses
+from .mailtext import extract_text
+from .triage import EngagedSet, Message
+
+SEEN_LABEL = "Agent/Seen"
+TRASHED_LABEL = "Agent/Trashed"
+SCOPES = [
+    "https://www.googleapis.com/auth/gmail.modify",
+    # Read and create events on your calendars (added for the chat assistant).
+    "https://www.googleapis.com/auth/calendar.events",
+    # See which calendars you have (family, shared, school...) so all of them are read.
+    "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+]
+
+
+def triage_query(lookback_hours: int, now: float | None = None) -> str:
+    """Unseen mail from the last N hours, in the inbox or in the Promotions category (which also
+    catches promos a filter moved out of the inbox). Never the backlog."""
+    since = int((now if now is not None else time.time()) - lookback_hours * 3600)
+    seen = SEEN_LABEL.lower().replace("/", "-")   # Gmail search spells nested labels with hyphens
+    return f"after:{since} -label:{seen} (in:inbox OR category:promotions)"
+
+
+class GmailClient(Protocol):
+    def list_new_messages(self, lookback_hours: int) -> list[Message]: ...
+    def recent_messages(self, lookback_days: int, limit: int) -> list[Message]: ...
+    def message_text(self, message_id: str) -> str: ...
+    def search(self, query: str, limit: int) -> list[dict]: ...
+    def read(self, message_id: str, body_limit: int = 4000) -> dict: ...
+    def send(self, to: list[str], subject: str, body: str, reply_to_id: str = "") -> str: ...
+    def save_draft(self, to: list[str], subject: str, body: str, reply_to_id: str = "") -> str: ...
+    def build_engaged_set(self) -> EngagedSet: ...
+    def trash(self, message_id: str) -> None: ...
+    def untrash(self, message_id: str) -> None: ...
+    def mark_seen(self, message_id: str) -> None: ...
+
+
+class GoogleGmail:
+    """Real Gmail API client. Requires `python -m app.auth_google` to have been run once."""
+
+    SENT_SAMPLE = 400      # recent sent messages scanned for engaged recipients
+    STARRED_SAMPLE = 200
+
+    def __init__(self, credentials):
+        from googleapiclient.discovery import build  # imported lazily so tests need no Google libs
+
+        self.svc = build("gmail", "v1", credentials=credentials, cache_discovery=False)
+        self._label_ids: dict[str, str] = {}
+
+    # --- labels -------------------------------------------------------------------------
+    def _label_id(self, name: str) -> str:
+        if name in self._label_ids:
+            return self._label_ids[name]
+        labels = self.svc.users().labels().list(userId="me").execute().get("labels", [])
+        for lab in labels:
+            self._label_ids[lab["name"]] = lab["id"]
+        if name not in self._label_ids:
+            created = self.svc.users().labels().create(
+                userId="me", body={"name": name, "labelListVisibility": "labelShow"}
+            ).execute()
+            self._label_ids[name] = created["id"]
+        return self._label_ids[name]
+
+    # --- reading ------------------------------------------------------------------------
+    def _ids(self, query: str, limit: int) -> list[dict]:
+        out: list[dict] = []
+        req = self.svc.users().messages().list(userId="me", q=query, maxResults=min(limit, 100))
+        while req is not None and len(out) < limit:
+            resp = req.execute()
+            out.extend(resp.get("messages", []))
+            req = self.svc.users().messages().list_next(req, resp)
+        return out[:limit]
+
+    def _metadata(self, message_id: str, headers: list[str]) -> dict:
+        return self.svc.users().messages().get(
+            userId="me", id=message_id, format="metadata", metadataHeaders=headers
+        ).execute()
+
+    @staticmethod
+    def _header(msg: dict, name: str) -> str:
+        for h in msg.get("payload", {}).get("headers", []):
+            if h["name"].lower() == name.lower():
+                return h["value"]
+        return ""
+
+    def _to_message(self, ref_id: str) -> Message:
+        m = self._metadata(ref_id, ["From", "Subject", "List-Unsubscribe"])
+        thread = self.svc.users().threads().get(
+            userId="me", id=m["threadId"], format="minimal"
+        ).execute()
+        replied = any("SENT" in t.get("labelIds", []) for t in thread.get("messages", []))
+        return Message(
+            id=m["id"],
+            thread_id=m["threadId"],
+            sender=self._header(m, "From"),
+            subject=self._header(m, "Subject"),
+            snippet=m.get("snippet", ""),
+            labels=frozenset(m.get("labelIds", [])),
+            has_list_unsubscribe=bool(self._header(m, "List-Unsubscribe")),
+            thread_has_user_reply=replied,
+        )
+
+    def list_new_messages(self, lookback_hours: int) -> list[Message]:
+        return [self._to_message(ref["id"]) for ref in self._ids(triage_query(lookback_hours), limit=200)]
+
+    def recent_messages(self, lookback_days: int, limit: int) -> list[Message]:
+        """Recent inbox mail (seen or not) for the briefing. Read-only."""
+        query = f"in:inbox newer_than:{lookback_days}d"
+        return [self._to_message(ref["id"]) for ref in self._ids(query, limit=limit)]
+
+    def message_text(self, message_id: str) -> str:
+        """Plain-text body (quoted replies and links stripped, truncated). Read-only."""
+        m = self.svc.users().messages().get(userId="me", id=message_id, format="full").execute()
+        return extract_text(m.get("payload", {}))
+
+    # --- chat assistant -------------------------------------------------------------------
+    def search(self, query: str, limit: int) -> list[dict]:
+        out = []
+        for ref in self._ids(query, limit=limit):
+            m = self._metadata(ref["id"], ["From", "To", "Subject", "Date"])
+            out.append({
+                "id": m["id"], "from": self._header(m, "From"), "to": self._header(m, "To"),
+                "subject": self._header(m, "Subject"), "date": self._header(m, "Date"),
+                "snippet": m.get("snippet", ""),
+            })
+        return out
+
+    def read(self, message_id: str, body_limit: int = 4000) -> dict:
+        m = self.svc.users().messages().get(userId="me", id=message_id, format="full").execute()
+        return {
+            "id": m["id"], "from": self._header(m, "From"), "to": self._header(m, "To"),
+            "cc": self._header(m, "Cc"), "subject": self._header(m, "Subject"),
+            "date": self._header(m, "Date"), "body": extract_text(m.get("payload", {}), limit=body_limit),
+        }
+
+    def _mime(self, to: list[str], subject: str, body: str, reply_to_id: str) -> dict:
+        import base64
+        from email.message import EmailMessage
+
+        msg = EmailMessage()
+        msg["To"] = ", ".join(to)
+        msg["Subject"] = subject
+        msg.set_content(body)
+        out: dict = {}
+        if reply_to_id:
+            orig = self._metadata(reply_to_id, ["Message-ID", "References"])
+            mid = self._header(orig, "Message-ID")
+            if mid:
+                msg["In-Reply-To"] = mid
+                msg["References"] = (self._header(orig, "References") + " " + mid).strip()
+            out["threadId"] = orig["threadId"]
+        out["raw"] = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+        return out
+
+    def send(self, to, subject, body, reply_to_id="") -> str:
+        sent = self.svc.users().messages().send(
+            userId="me", body=self._mime(to, subject, body, reply_to_id)).execute()
+        return sent["id"]
+
+    def save_draft(self, to, subject, body, reply_to_id="") -> str:
+        draft = self.svc.users().drafts().create(
+            userId="me", body={"message": self._mime(to, subject, body, reply_to_id)}).execute()
+        return draft["id"]
+
+    def build_engaged_set(self) -> EngagedSet:
+        """Domains/addresses you have written to, or starred mail from."""
+        engaged = EngagedSet()
+        for ref in self._ids("in:sent newer_than:365d", self.SENT_SAMPLE):
+            m = self._metadata(ref["id"], ["To", "Cc"])
+            for header in ("To", "Cc"):
+                for addr in parse_addresses(self._header(m, header)):
+                    self._add(engaged, addr)
+        for ref in self._ids("is:starred", self.STARRED_SAMPLE):
+            m = self._metadata(ref["id"], ["From"])
+            for addr in parse_addresses(self._header(m, "From")):
+                self._add(engaged, addr)
+        return engaged
+
+    @staticmethod
+    def _add(engaged: EngagedSet, addr: str) -> None:
+        engaged.addresses.add(addr)
+        if (domain := engagement_domain(addr)):
+            engaged.domains.add(domain)
+
+    # --- acting (all reversible) ---------------------------------------------------------
+    def trash(self, message_id: str) -> None:
+        self.svc.users().messages().modify(
+            userId="me", id=message_id,
+            body={"addLabelIds": [self._label_id(TRASHED_LABEL), self._label_id(SEEN_LABEL)]},
+        ).execute()
+        self.svc.users().messages().trash(userId="me", id=message_id).execute()
+
+    def untrash(self, message_id: str) -> None:
+        self.svc.users().messages().untrash(userId="me", id=message_id).execute()
+        self.svc.users().messages().modify(
+            userId="me", id=message_id,
+            body={"removeLabelIds": [self._label_id(TRASHED_LABEL)],
+                  "addLabelIds": ["INBOX"]},
+        ).execute()
+
+    def mark_seen(self, message_id: str) -> None:
+        self.svc.users().messages().modify(
+            userId="me", id=message_id, body={"addLabelIds": [self._label_id(SEEN_LABEL)]}
+        ).execute()
