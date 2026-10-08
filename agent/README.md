@@ -15,13 +15,14 @@ An `AGENT_TOKEN` is required on every API call as a second layer.
 
 ## What triage does
 
-Runs nightly (and on demand) over **new** inbox mail only:
+Runs nightly (and on demand) over mail from the **last 24 hours** only (`TRIAGE_LOOKBACK_HOURS`), in the
+inbox or Gmail's Promotions category, never the backlog:
 
 | Situation | Action |
 |---|---|
 | Promotion from a domain you've never emailed/starred | **Trash** (reversible; logged; one-tap Restore) |
 | Financial/government sender, SSN/card/bank-style content | Never touched |
-| Starred, Important, or a thread you replied in | Never touched |
+| Starred, a thread you replied in, or Important (outside Promotions) | Never touched |
 | From someone you've engaged with | Labelled `Agent/Seen`, left in inbox |
 | Everything else | Labelled `Agent/Seen`, left in inbox |
 

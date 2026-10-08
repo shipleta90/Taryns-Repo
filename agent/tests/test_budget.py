@@ -240,7 +240,7 @@ def test_csv_import_twice_does_not_duplicate(db):
 
 # ---- API ---------------------------------------------------------------------------------
 def test_budget_api(tmp_path):
-    s = Settings(token="secret", dry_run=True, max_trash_per_run=1, lookback_days=1, triage_at="",
+    s = Settings(token="secret", dry_run=True, max_trash_per_run=1, lookback_hours=24, triage_at="",
                  data_dir=tmp_path, briefing_at="", morning_at="", budget_sync_at="")
     auth = {"Authorization": "Bearer secret"}
     with TestClient(create_app(s, gmail=FakeGmail([]), llm=FakeLLM(), simplefin=FakeSF(*sf_data()))) as c:

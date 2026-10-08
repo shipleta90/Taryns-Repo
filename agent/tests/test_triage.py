@@ -72,3 +72,20 @@ def test_updates_that_are_transactional_or_neutral_are_kept():
     for subject in ["Your order has shipped", "Welcome to your Google Cloud Free Trial",
                     "Security alert: new sign-in", "Weekly digest", "Your receipt: 20% off applied"]:
         assert decide(_updates(subject), EngagedSet()).action is Action.LABEL, subject
+
+
+def test_promotions_marked_important_by_gmail_are_still_triaged():
+    m = Message("1", "t", "deals@coffee.example", "Your third bag ships soon",
+                labels=frozenset({"INBOX", "CATEGORY_PROMOTIONS", "IMPORTANT"}), has_list_unsubscribe=True)
+    assert decide(m, EngagedSet()).action is Action.TRASH
+    starred = Message("2", "t", "deals@coffee.example", "x",
+                      labels=frozenset({"CATEGORY_PROMOTIONS", "IMPORTANT", "STARRED"}))
+    assert decide(starred, EngagedSet()).action is Action.SKIP      # starring still protects
+    personal = Message("3", "t", "pat@example.com", "Re: plans", labels=frozenset({"INBOX", "IMPORTANT"}))
+    assert decide(personal, EngagedSet()).action is Action.SKIP     # Important outside Promotions still protects
+
+
+def test_triage_query_is_last_24_hours_inbox_or_promotions():
+    from app.gmail_client import triage_query
+    q = triage_query(24, now=1_760_000_000)
+    assert q == "after:1759913600 -label:agent-seen (in:inbox OR category:promotions)"

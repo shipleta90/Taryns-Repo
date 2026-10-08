@@ -10,7 +10,7 @@ class FakeGmail:
         self.restored: list[str] = []
         self.engaged_builds = 0
 
-    def list_new_messages(self, lookback_days):
+    def list_new_messages(self, lookback_hours):
         return self.messages
 
     def recent_messages(self, lookback_days, limit):

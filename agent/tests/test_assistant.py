@@ -85,7 +85,7 @@ class FakeCal:
 def env(tmp_path):
     db = Database(tmp_path / "t.sqlite3")
     mail, cal = FakeMail(), FakeCal()
-    s = Settings(token="t", dry_run=True, max_trash_per_run=1, lookback_days=1, triage_at="", data_dir=tmp_path)
+    s = Settings(token="t", dry_run=True, max_trash_per_run=1, lookback_hours=24, triage_at="", data_dir=tmp_path)
 
     def make(script):
         claude = FakeClaude(script)

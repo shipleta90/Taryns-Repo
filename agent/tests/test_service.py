@@ -8,7 +8,7 @@ from tests.fakes import FakeGmail, promo
 
 
 def settings(tmp_path, dry_run=False, cap=25):
-    return Settings(token="t", dry_run=dry_run, max_trash_per_run=cap, lookback_days=2,
+    return Settings(token="t", dry_run=dry_run, max_trash_per_run=cap, lookback_hours=24,
                     triage_at="", data_dir=tmp_path)
 
 
