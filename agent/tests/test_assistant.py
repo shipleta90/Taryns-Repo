@@ -392,3 +392,18 @@ def test_transcript_reports_latest_id_and_hides_update_notes(env):
     a.notify("[App update: scheduling task #1 got a reply.]")
     t = a.transcript()
     assert [i["type"] for i in t["items"]] == ["assistant"] and t["latest_id"] > 0
+
+
+def test_expired_google_sign_in_is_explained_to_bruce(env):
+    make, db, mail, _ = env
+
+    class RefreshError(Exception):
+        pass
+
+    def expired(query, limit):
+        raise RefreshError("invalid_grant: Token has been expired or revoked.")
+    mail.search = expired
+    a, claude = make([tool("search_email", {"query": "x", "max_results": 3}), text("ok")])
+    a.send("any email from coach?")
+    res = claude.calls[-1][-1]["content"][0]
+    assert res["is_error"] and "python -m app.auth_google" in res["content"]

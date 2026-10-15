@@ -25,6 +25,8 @@ FALLBACK_BETA = "server-side-fallback-2026-07-01"
 MAX_STEPS = 8
 IDLE_RESET_SECONDS = 3 * 3600
 
+GOOGLE_EXPIRED = ("Google sign-in expired. Tell the user to run this on the Mac mini: "
+                  "python -m app.auth_google  (then restart the agent).")
 TASK_TTL_SECONDS = 14 * 24 * 3600   # scheduling conversations are watched for two weeks
 
 SYSTEM_TEMPLATE = """You are {assistant}, {owner}'s personal assistant, chatting with {owner} from a phone app.
@@ -196,8 +198,11 @@ class Assistant:
                     "content": json.dumps(result, ensure_ascii=False)}
         except Exception as exc:  # report to the model so it can recover or tell the user
             log.warning("tool %s failed: %s", name, exc)
+            message = str(exc)[:300]
+            if type(exc).__name__ == "RefreshError" or "invalid_grant" in message:
+                message = GOOGLE_EXPIRED   # say exactly what to do, not a vague connection error
             return {"type": "tool_result", "tool_use_id": block["id"], "is_error": True,
-                    "content": f"Error: {str(exc)[:300]}"}
+                    "content": f"Error: {message}"}
 
     def _parse_date(self, s: str) -> dt.date:
         return dt.date.fromisoformat(s.strip()[:10])

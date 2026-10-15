@@ -132,8 +132,9 @@ cp .env.example .env     # then set AGENT_TOKEN (see the comment in the file)
 4. `python -m app.auth_google` and approve in the browser. The token goes to the macOS Keychain.
 5. Delete `credentials.json`.
 
-(Apps in "testing" status make Google expire the token after 7 days. When that happens, re-run step 4.
-Publishing the app as "In production" for personal use avoids this.)
+(Apps in "testing" status make Google expire the sign-in after 7 days. When that happens, run
+`python -m app.auth_google` again; no new download is needed after the first time. Then restart the agent.
+Publishing the app as "In production" for personal use avoids the expiry.)
 
 ### 2. Run it
 ```bash
