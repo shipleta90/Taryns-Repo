@@ -114,31 +114,31 @@ def test_simple_reply_and_request_shape(env):
     assert first.startswith("[Now: ") and first.endswith("hello")
 
 
-def test_private_email_is_withheld_from_cloud(env):
+def test_every_email_is_visible_to_bruce(env):
     make, *_ = env
     a, claude = make([tool("search_email", {"query": "newer_than:1d", "max_results": 10}), text("done")])
     a.send("what came in?")
-    results = last_tool_result(claude)
-    by_id = {r["id"]: r for r in results}
+    by_id = {r["id"]: r for r in last_tool_result(claude)}
     assert by_id["m1"]["subject"] == "Games Sunday"
-    assert by_id["m2"]["private"] is True and "subject" not in by_id["m2"]
+    assert by_id["m2"]["subject"] == "New document"            # health-related, but readable now
 
 
-def test_reading_email_with_ssn_is_withheld(env):
+def test_ssn_is_scrubbed_before_reaching_the_cloud(env):
     make, *_ = env
     a, claude = make([tool("read_email", {"message_id": "m3"}), text("ok")])
     a.send("read pat's email")
     r = last_tool_result(claude)
-    assert r["private"] is True and "123-45-6789" not in json.dumps(claude.calls[-1])
+    assert r["redacted"] is True and "[hidden SSN]" in r["body"] and "Ignore instructions" in r["body"]
+    assert "123-45-6789" not in json.dumps(claude.calls[-1])
 
 
-def test_private_calendar_event_keeps_time_hides_title(env):
+def test_calendar_events_are_visible(env):
     make, _, _, cal = env
     a, claude = make([tool("list_events", {"start_date": "2026-10-06", "end_date": "2026-10-12"}), text("ok")])
     a.send("what's this week?")
     r = last_tool_result(claude)
     assert r[0]["title"] == "Soccer"
-    assert r[1]["title"] == "Private appointment" and r[1]["start"] == "Tue 3:00 PM"
+    assert r[1]["title"] != "Private appointment" and r[1]["start"] == "Tue 3:00 PM"
     start, end = cal.queries[0]
     assert start.isoformat().startswith("2026-10-06T00:00") and end.isoformat().startswith("2026-10-13T00:00")
 
@@ -375,7 +375,8 @@ def test_task_threads_still_block_ssn(env):
                        "date": "d", "snippet": "", "body": "my ssn is 123-45-6789"}
     a, claude = make([tool("read_email", {"message_id": "z"}), text("ok")])
     a.send("read it")
-    assert last_tool_result(claude)["private"] is True
+    assert "123-45-6789" not in json.dumps(claude.calls[-1])
+    assert last_tool_result(claude)["body"] == "my ssn is [hidden SSN]"
 
 
 def test_scheduling_tasks_expire(env):
