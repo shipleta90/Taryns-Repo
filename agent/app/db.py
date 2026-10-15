@@ -101,6 +101,16 @@ CREATE TABLE IF NOT EXISTS fin_settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id INTEGER NOT NULL,
+    thread_id TEXT NOT NULL,
+    counterpart_json TEXT NOT NULL,   -- who Bruce is scheduling with
+    goal TEXT NOT NULL,
+    seen_json TEXT NOT NULL,          -- message ids already handled (incl. our own first email)
+    status TEXT NOT NULL DEFAULT 'waiting',   -- waiting | booked | expired | cancelled
+    created_at REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     started_at REAL NOT NULL,
@@ -400,3 +410,43 @@ class Database:
                 "INSERT INTO fin_settings(key, value) VALUES (?,?)"
                 " ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                 [(k, json.dumps(v)) for k, v in values.items()])
+
+    # scheduling tasks (Bruce watching an email thread for replies)
+    def start_task(self, conversation_id: int, thread_id: str, counterpart: list[str], goal: str,
+                   first_message_id: str) -> int:
+        with self.conn:
+            cur = self.conn.execute(
+                "INSERT INTO tasks(conversation_id, thread_id, counterpart_json, goal, seen_json, created_at)"
+                " VALUES (?,?,?,?,?,?)",
+                (conversation_id, thread_id, json.dumps(counterpart), goal,
+                 json.dumps([first_message_id] if first_message_id else []), time.time()))
+        return int(cur.lastrowid)
+
+    def _task(self, row) -> dict:
+        d = dict(row)
+        d["counterpart"] = json.loads(d.pop("counterpart_json"))
+        d["seen_ids"] = json.loads(d.pop("seen_json"))
+        return d
+
+    def active_tasks(self) -> list[dict]:
+        return [self._task(r) for r in self.conn.execute("SELECT * FROM tasks WHERE status='waiting' ORDER BY id")]
+
+    def task_for_thread(self, thread_id: str) -> dict | None:
+        row = self.conn.execute("SELECT * FROM tasks WHERE thread_id=? ORDER BY id DESC LIMIT 1",
+                                (thread_id,)).fetchone()
+        return self._task(row) if row else None
+
+    def get_task(self, task_id: int) -> dict | None:
+        row = self.conn.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
+        return self._task(row) if row else None
+
+    def mark_task_seen(self, task_id: int, message_ids: list[str]) -> None:
+        task = self.get_task(task_id)
+        if task:
+            with self.conn:
+                self.conn.execute("UPDATE tasks SET seen_json=? WHERE id=?",
+                                  (json.dumps(task["seen_ids"] + message_ids), task_id))
+
+    def finish_task(self, task_id: int, status: str) -> None:
+        with self.conn:
+            self.conn.execute("UPDATE tasks SET status=? WHERE id=?", (status, task_id))

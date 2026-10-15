@@ -37,6 +37,9 @@ class Settings:
     morning_about: str = ""          # one line about you, to tailor "The Strategic Play"
     budget_sync_at: str = "05:15"     # daily bank sync; "" turns it off
     timezone: str = "America/Los_Angeles"
+    owner_name: str = "Taryn"            # emails are written and signed as this person
+    assistant_name: str = "Bruce"
+    followup_check_minutes: int = 10     # how often scheduling threads are checked for replies
     claude_model: str = "claude-opus-5-5"
     claude_effort: str = "medium"
 
@@ -68,6 +71,9 @@ def load_settings() -> Settings:
         morning_about=os.environ.get("MORNING_ABOUT", ""),
         budget_sync_at=os.environ.get("BUDGET_SYNC_AT", "05:15"),
         timezone=os.environ.get("TIMEZONE", "America/Los_Angeles"),
+        owner_name=os.environ.get("OWNER_NAME", "Taryn"),
+        assistant_name=os.environ.get("ASSISTANT_NAME", "Bruce"),
+        followup_check_minutes=int(os.environ.get("FOLLOWUP_CHECK_MINUTES", "10")),
         claude_model=os.environ.get("CLAUDE_MODEL", "claude-opus-5-5"),
         claude_effort=os.environ.get("CLAUDE_EFFORT", "medium"),
     )

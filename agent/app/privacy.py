@@ -42,3 +42,11 @@ def event(e: dict) -> dict:
 def blocked_user_text(text: str) -> bool:
     """Your own chat messages may mention anything, except numbers like an SSN or card number."""
     return bool(set(safety.assess(text).reasons) & HARD_PII)
+
+
+def email_full_for_task(m: dict) -> dict:
+    """For a thread you asked the assistant to handle (e.g. booking with a doctor's office):
+    readable even if health-related, but anything with an SSN- or card-like number stays withheld."""
+    if blocked_user_text(f"{m.get('subject', '')}\n{m.get('body', '')}"):
+        return {"id": m["id"], "date": m.get("date", ""), "private": True, "note": WITHHELD}
+    return {k: m.get(k, "") for k in ("id", "from", "to", "cc", "subject", "date", "body")}

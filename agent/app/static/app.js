@@ -36,7 +36,17 @@ function ago(ts) {
   return Math.round(s / 86400) + " d ago";
 }
 
+let assistantName = store.get("assistantName") || "Bruce";
+function applyAssistantName(name) {
+  assistantName = name || "Bruce";
+  store.set("assistantName", assistantName);
+  $("tab-chat").textContent = assistantName;
+  $("chat-input").placeholder = `Message ${assistantName}`;
+  if (!$("view-chat").hidden) $("title").textContent = assistantName;
+}
+
 function renderStatus(st) {
+  if (st.assistant_name) applyAssistantName(st.assistant_name);
   const mode = $("mode");
   mode.textContent = st.dry_run_default ? "Preview mode" : "Live";
   mode.classList.toggle("live", !st.dry_run_default);
@@ -346,7 +356,8 @@ function proposalHtml(p) {
       <div class="field">To <strong>${esc(pl.to.join(", "))}</strong></div>
       <div class="field">Subject <strong>${esc(pl.subject)}</strong></div>
       <div class="body">${esc(pl.body)}</div>
-      ${pl.new_recipients && pl.new_recipients.length ? `<div class="warn">You've never emailed ${esc(pl.new_recipients.join(", "))}. Check the address.</div>` : ""}`;
+      ${pl.new_recipients && pl.new_recipients.length ? `<div class="warn">You've never emailed ${esc(pl.new_recipients.join(", "))}. Check the address.</div>` : ""}
+      ${pl.scheduling_goal ? `<div class="field">After sending, ${esc(assistantName)} watches for the reply to schedule: <strong>${esc(pl.scheduling_goal)}</strong></div>` : ""}`;
     buttons = `<button class="act" data-id="${p.id}" data-mode="send">Send</button>
       <button class="act secondary" data-id="${p.id}" data-mode="draft">Save draft</button>
       <button class="rej secondary" data-id="${p.id}">Don't send</button>`;
@@ -375,18 +386,35 @@ function renderChat(data, typing) {
   let html = items.map((i) =>
     i.type === "proposal" ? proposalHtml(i) : `<div class="bubble ${i.type}">${esc(i.text)}</div>`).join("");
   if (typing) html += `<div class="bubble user">${esc(typing)}</div><div class="bubble assistant typing">Thinking…</div>`;
-  if (!html) html = '<div class="chat-empty">Try “What’s on my calendar tomorrow?” or “Find the email about Sunday’s game and add it to my calendar.”</div>';
+  if (!html) html = '<div class="chat-empty">Try “What’s on my calendar tomorrow?” or “Book a dentist cleaning in the next two weeks, mornings only.”</div>';
   $("chat-log").innerHTML = html;
   window.scrollTo(0, document.body.scrollHeight);
 }
 
 let chatCache = { items: [] };
+function markChatSeen(data) {
+  if (data && data.latest_id != null) store.set("chatSeen", String(data.latest_id));
+  $("tab-chat").classList.remove("dot");
+}
 async function loadChat() {
   try {
     chatCache = await api("/api/chat");
     renderChat(chatCache);
+    markChatSeen(chatCache);
   } catch (e) { /* shown elsewhere */ }
 }
+async function checkForUpdates() {
+  try {
+    const data = await api("/api/chat");
+    if ($("view-chat").hidden) {
+      const seen = Number(store.get("chatSeen") || 0);
+      $("tab-chat").classList.toggle("dot", (data.latest_id || 0) > seen);
+    } else if ((data.latest_id || 0) !== (chatCache.latest_id || 0) && !chatBusy) {
+      chatCache = data; renderChat(chatCache); markChatSeen(chatCache);
+    }
+  } catch (e) { /* offline; try again later */ }
+}
+setInterval(checkForUpdates, 60000);
 
 async function sendChat(text) {
   if (chatBusy || !text.trim()) return;
@@ -397,6 +425,7 @@ async function sendChat(text) {
     chatCache = await api("/api/chat", { method: "POST", body: JSON.stringify({ text }) });
     if (chatCache.blocked) alert(chatCache.reply);
     renderChat(chatCache);
+    markChatSeen(chatCache);
   } catch (e) {
     renderChat(chatCache);
     $("chat-input").value = text;   // don't lose what you typed
@@ -438,7 +467,7 @@ function showTab(name) {
   $("view-morning").hidden = name !== "morning";
   $("view-budget").hidden = name !== "budget";
   $("view-inbox").hidden = name !== "inbox";
-  $("title").textContent = { chat: "Chat", morning: "Briefing", budget: "Budget", inbox: "Inbox" }[name];
+  $("title").textContent = { chat: assistantName, morning: "Briefing", budget: "Budget", inbox: "Inbox" }[name];
   if (name === "chat") loadChat();
   if (name === "morning") loadMorning();
   if (name === "budget") loadBudget();
@@ -452,6 +481,7 @@ try {
   const c = JSON.parse(store.get("cache") || "null");
   if (c) { renderStatus(c.st); renderActions(c.rows); }
 } catch { /* ignore bad cache */ }
+applyAssistantName(assistantName);
 const savedTab = store.get("tab");
 try {
   const mc = JSON.parse(store.get("mcache") || "null");

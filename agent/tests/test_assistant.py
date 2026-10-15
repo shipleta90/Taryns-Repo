@@ -56,11 +56,14 @@ class FakeMail:
         return list(self.inbox.values())[:limit]
 
     def read(self, mid, body_limit=4000):
-        return self.inbox[mid]
+        return {"threadId": "", **self.inbox[mid]}
 
     def send(self, to, subject, body, reply_to_id=""):
         self.sent.append((to, subject, body, reply_to_id))
-        return "sent1"
+        return {"id": f"sent{len(self.sent)}", "threadId": "th1"}
+
+    def thread_messages(self, thread_id):
+        return self.threads.get(thread_id, []) if hasattr(self, "threads") else []
 
     def save_draft(self, to, subject, body, reply_to_id=""):
         self.drafts.append((to, subject, body, reply_to_id))
@@ -296,3 +299,96 @@ def test_briefing_tool_when_turned_off(env):
     a, claude = make([tool("get_briefing", {}), text("ok")])
     a.send("briefing?")
     assert "turned off" in last_tool_result(claude)["note"]
+
+
+
+# ---- Bruce: named assistant, writes as the owner, schedules over email ------------------
+def test_bruce_writes_as_the_owner():
+    from app.assistant import system_prompt
+    p = system_prompt("Taryn", "Bruce")
+    assert p.startswith("You are Bruce, Taryn's personal assistant")
+    assert 'sign off with "Taryn"' in p and "Don't mention an assistant or AI" in p
+
+
+def test_scheduling_round_trip(env):
+    make, db, mail, cal = env
+    a, claude = make([
+        # 1. you ask; Bruce checks the calendar and proposes an email with open times
+        tool("propose_email", {"to": ["frontdesk@leedental.com"], "subject": "Cleaning appointment",
+                               "body": "Hi, could I come in Tue 9am or Thu 10am? Thanks, Taryn",
+                               "reply_to_message_id": "", "scheduling_goal": "Dental cleaning, 1 hr"}),
+        text("Drafted an email to the office with two times."),
+        # 3. reply arrives; Bruce reads it and proposes the booking + confirmation
+        tool("read_email", {"message_id": "r1"}, "t2"),
+        Resp([{"type": "tool_use", "id": "t3", "name": "propose_event", "input": {
+                  "title": "Dental cleaning", "start": "2026-10-22T10:00", "end": "2026-10-22T11:00",
+                  "location": "", "description": "", "attendees": [], "scheduling_task_id": 1}},
+              {"type": "tool_use", "id": "t4", "name": "propose_email", "input": {
+                  "to": ["frontdesk@leedental.com"], "subject": "Re: Cleaning appointment",
+                  "body": "Thursday at 10 works, see you then. Taryn", "reply_to_message_id": "r1",
+                  "scheduling_goal": ""}}], "tool_use"),
+        text("They offered Thursday 10am. I lined up the booking and a confirmation for you."),
+    ])
+    a.send("book a dental cleaning next week")
+    first = db.proposals_for(1)[0]
+    assert first["payload"]["scheduling_goal"] == "Dental cleaning, 1 hr" and mail.sent == []
+
+    # 2. you approve the email: it's sent and a scheduling task starts watching the thread
+    done = a.approve(first["id"])
+    assert "scheduling task #1" in done["result"]
+    task = db.get_task(1)
+    assert task["thread_id"] == "th1" and task["status"] == "waiting" and task["seen_ids"] == ["sent1"]
+
+    # no reply yet: nothing happens
+    mail.threads = {"th1": [{"id": "sent1", "from": "me", "labels": ["SENT"]}]}
+    assert a.check_scheduling_replies() == 0
+
+    # the office replies (health-ish wording is fine on a thread you asked Bruce to handle)
+    mail.inbox["r1"] = {"id": "r1", "threadId": "th1", "from": "Lee Dental <frontdesk@leedental.com>",
+                        "to": "me", "subject": "Re: Cleaning appointment", "date": "d",
+                        "snippet": "", "body": "Thursday 10am works for your dental appointment reminder."}
+    mail.threads["th1"].append({"id": "r1", "from": "frontdesk@leedental.com", "labels": ["INBOX"]})
+    assert a.check_scheduling_replies() == 1
+    results = [b for m in claude.calls[-1] if m["role"] == "user" and isinstance(m["content"], list)
+               for b in m["content"] if b.get("type") == "tool_result" and b["tool_use_id"] == "t2"]
+    assert json.loads(results[0]["content"])["body"].startswith("Thursday 10am")   # not withheld
+    note = [m for m in claude.calls[2] if m["role"] == "user"][-1]["content"][-1]["text"]
+    assert "scheduling task #1" in note and "r1" in note
+
+    # nothing is booked or sent until you approve
+    assert cal.created == [] and len(mail.sent) == 1
+    event, confirm = [p for p in db.proposals_for(1) if p["status"] == "pending"]
+    assert a.check_scheduling_replies() == 0                                # same reply isn't handled twice
+
+    # 4. you approve the event: booked, task closed; then the confirmation goes out in the same thread
+    assert "is done" in a.approve(event["id"])["result"]
+    assert db.get_task(1)["status"] == "booked" and cal.created[0][0] == "Dental cleaning"
+    a.approve(confirm["id"])
+    assert mail.sent[-1][3] == "r1"
+    assert db.active_tasks() == []
+
+
+def test_task_threads_still_block_ssn(env):
+    make, db, mail, _ = env
+    db.start_task(1, "th9", ["x@y.com"], "meeting", "s0")
+    mail.inbox["z"] = {"id": "z", "threadId": "th9", "from": "x@y.com", "to": "me", "subject": "hi",
+                       "date": "d", "snippet": "", "body": "my ssn is 123-45-6789"}
+    a, claude = make([tool("read_email", {"message_id": "z"}), text("ok")])
+    a.send("read it")
+    assert last_tool_result(claude)["private"] is True
+
+
+def test_scheduling_tasks_expire(env):
+    make, db, *_ = env
+    tid = db.start_task(1, "th7", ["x@y.com"], "meeting", "s0")
+    db.conn.execute("UPDATE tasks SET created_at = created_at - 15*24*3600")
+    a, _ = make([])
+    assert a.check_scheduling_replies() == 0 and db.get_task(tid)["status"] == "expired"
+
+
+def test_transcript_reports_latest_id_and_hides_update_notes(env):
+    make, db, *_ = env
+    a, _ = make([text("Office replied; nothing to do yet.")])
+    a.notify("[App update: scheduling task #1 got a reply.]")
+    t = a.transcript()
+    assert [i["type"] for i in t["items"]] == ["assistant"] and t["latest_id"] > 0

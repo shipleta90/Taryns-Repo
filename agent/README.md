@@ -31,10 +31,18 @@ Safety properties: starts in **preview mode** (logs only); trash cap per run (de
 decisions, so a malicious email can't steer them. Shared providers (gmail.com, icloud.com, …) count as
 engaged per exact address, never per domain.
 
-## Chat assistant
+## Bruce (chat assistant)
 
-The **Chat** tab talks to Claude (cloud) with tools for your Gmail and Google Calendar:
-search and read mail, check your calendar, and propose emails and events.
+The **Bruce** tab (`ASSISTANT_NAME`) talks to Claude (cloud) with tools for your Gmail and Google Calendar:
+search and read mail, check your calendar, and propose emails and events. Emails are written in the first
+person as you and signed with `OWNER_NAME`.
+
+**Scheduling with other people:** ask "book a dentist cleaning next week, mornings" and Bruce checks your
+calendar and drafts an email offering open times. When you send it, he watches that thread (every
+`FOLLOWUP_CHECK_MINUTES`, for up to two weeks). When they reply, he reads it and lines up the next step:
+a calendar event plus a confirmation, or a reply with new times. Each one is a card you approve. A red dot on
+the Bruce tab means he has an update. On a thread you asked him to handle, he may read replies even if they
+look health-related (e.g. a doctor's office); SSN/card-like numbers are still withheld.
 
 - **Nothing happens without you.** Sending an email or creating an event shows a card in the chat;
   it runs only when you tap **Send / Add to calendar** (or **Save draft**). The model cannot do it itself,

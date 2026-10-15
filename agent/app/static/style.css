@@ -102,3 +102,5 @@ details.more summary { font-size: 13px; text-transform: uppercase; letter-spacin
 .txns { font-size: 13px; color: var(--muted); margin-top: 8px; display: grid; gap: 4px; }
 .txns .txn { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; }
 .txns .txn-cat select { font-size: 14px; padding: 4px 8px; }
+
+.tab.dot::after { content: ""; display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: var(--danger); vertical-align: middle; }

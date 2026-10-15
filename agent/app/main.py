@@ -146,6 +146,20 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
 
     budget_state = {"running": False, "error": None}
 
+    async def check_followups_once() -> int:
+        if not db.active_tasks():
+            return 0
+        async with chat_lock:   # never at the same time as a chat turn
+            return await asyncio.to_thread(get_assistant().check_scheduling_replies)
+
+    async def watch_followups():
+        while True:
+            await asyncio.sleep(settings.followup_check_minutes * 60)
+            try:
+                await check_followups_once()
+            except Exception:  # e.g. no API key yet, Google sign-in expired; try again next round
+                log.exception("follow-up check failed")
+
     async def run_budget_sync():
         if budget_state["running"]:
             return
@@ -203,6 +217,8 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
             tasks.append(asyncio.create_task(daily(settings.triage_at, nightly)))
         if settings.morning_at:
             tasks.append(asyncio.create_task(daily(settings.morning_at, run_morning)))
+        if settings.followup_check_minutes > 0:
+            tasks.append(asyncio.create_task(watch_followups()))
         if settings.budget_sync_at:
             tasks.append(asyncio.create_task(daily(settings.budget_sync_at, run_budget_sync)))
         if settings.briefing_enabled and settings.briefing_at:
@@ -229,7 +245,7 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
     @app.get("/api/status", dependencies=[Depends(require_auth)])
     def status():
         return {"dry_run_default": settings.dry_run, "last_run": db.last_run(),
-                "schedule": settings.triage_at or None}
+                "schedule": settings.triage_at or None, "assistant_name": settings.assistant_name}
 
     @app.post("/api/triage/run", dependencies=[Depends(require_auth)])
     async def triage_run(req: TriageRequest):
@@ -352,6 +368,13 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
                 log.exception("chat turn failed")
                 raise HTTPException(status_code=502, detail=f"The assistant hit an error: {str(exc)[:200]}")
         return {**out, **assistant.transcript(out["conversation_id"])}
+
+    @app.post("/api/followups/check", dependencies=[Depends(require_auth)])
+    async def followups_check():
+        try:
+            return {"turns": await check_followups_once()}
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
 
     @app.post("/api/chat/new", dependencies=[Depends(require_auth)])
     def chat_new():

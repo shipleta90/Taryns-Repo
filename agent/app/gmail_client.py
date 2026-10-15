@@ -38,7 +38,8 @@ class GmailClient(Protocol):
     def message_text(self, message_id: str) -> str: ...
     def search(self, query: str, limit: int) -> list[dict]: ...
     def read(self, message_id: str, body_limit: int = 4000) -> dict: ...
-    def send(self, to: list[str], subject: str, body: str, reply_to_id: str = "") -> str: ...
+    def send(self, to: list[str], subject: str, body: str, reply_to_id: str = "") -> dict: ...
+    def thread_messages(self, thread_id: str) -> list[dict]: ...
     def save_draft(self, to: list[str], subject: str, body: str, reply_to_id: str = "") -> str: ...
     def build_engaged_set(self) -> EngagedSet: ...
     def trash(self, message_id: str) -> None: ...
@@ -139,8 +140,8 @@ class GoogleGmail:
     def read(self, message_id: str, body_limit: int = 4000) -> dict:
         m = self.svc.users().messages().get(userId="me", id=message_id, format="full").execute()
         return {
-            "id": m["id"], "from": self._header(m, "From"), "to": self._header(m, "To"),
-            "cc": self._header(m, "Cc"), "subject": self._header(m, "Subject"),
+            "id": m["id"], "threadId": m.get("threadId", ""), "from": self._header(m, "From"),
+            "to": self._header(m, "To"), "cc": self._header(m, "Cc"), "subject": self._header(m, "Subject"),
             "date": self._header(m, "Date"), "body": extract_text(m.get("payload", {}), limit=body_limit),
         }
 
@@ -163,10 +164,17 @@ class GoogleGmail:
         out["raw"] = base64.urlsafe_b64encode(msg.as_bytes()).decode()
         return out
 
-    def send(self, to, subject, body, reply_to_id="") -> str:
+    def send(self, to, subject, body, reply_to_id="") -> dict:
         sent = self.svc.users().messages().send(
             userId="me", body=self._mime(to, subject, body, reply_to_id)).execute()
-        return sent["id"]
+        return {"id": sent["id"], "threadId": sent.get("threadId", "")}
+
+    def thread_messages(self, thread_id: str) -> list[dict]:
+        """Messages in a thread, oldest first: id, sender and labels (SENT marks your own)."""
+        t = self.svc.users().threads().get(userId="me", id=thread_id, format="metadata",
+                                           metadataHeaders=["From"]).execute()
+        return [{"id": m["id"], "from": self._header(m, "From"), "labels": m.get("labelIds", [])}
+                for m in t.get("messages", [])]
 
     def save_draft(self, to, subject, body, reply_to_id="") -> str:
         draft = self.svc.users().drafts().create(
