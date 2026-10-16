@@ -180,7 +180,7 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
             gathered = await asyncio.to_thread(morning_mod.gather, get_gmail, get_slack)
             await asyncio.to_thread(morning_mod.build, get_claude(), db, settings.claude_model,
                                     settings.morning_effort, settings.timezone, settings.morning_about,
-                                    gathered)
+                                    gathered, settings.morning_company)
         except Exception as exc:  # shown in the app; never crashes the server
             log.exception("morning briefing failed")
             morning_state["error"] = str(exc)[:300]
