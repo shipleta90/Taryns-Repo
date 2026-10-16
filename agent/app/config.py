@@ -34,7 +34,8 @@ class Settings:
     briefing_max_items: int = 25
     morning_at: str = "06:30"        # Chief-of-Staff briefing time; "" turns it off
     morning_effort: str = "medium"
-    morning_about: str = ""          # one line about you, to tailor "The Strategic Play"
+    morning_about: str = ""          # one line about you, to tailor the briefing
+    morning_company: str = ""        # companies/industry for the "Company & Industry Watch" section
     budget_sync_at: str = "05:15"     # daily bank sync; "" turns it off
     timezone: str = "America/Los_Angeles"
     owner_name: str = "Taryn"            # emails are written and signed as this person
@@ -69,6 +70,7 @@ def load_settings() -> Settings:
         morning_at=os.environ.get("MORNING_AT", "06:30"),
         morning_effort=os.environ.get("MORNING_EFFORT", "medium"),
         morning_about=os.environ.get("MORNING_ABOUT", ""),
+        morning_company=os.environ.get("MORNING_COMPANY_WATCH", ""),
         budget_sync_at=os.environ.get("BUDGET_SYNC_AT", "05:15"),
         timezone=os.environ.get("TIMEZONE", "America/Los_Angeles"),
         owner_name=os.environ.get("OWNER_NAME", "Taryn"),

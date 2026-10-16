@@ -80,17 +80,18 @@ flags categories running hot, and lets you set monthly category limits.
 
 ## Chief-of-Staff briefing (Briefing tab)
 
-Every morning at `MORNING_AT` (default 06:30) and on demand, Claude writes a seven-part briefing:
-World News Radar, AI & Agentic Operations Breakthroughs, Process Automation & Tooling Pulse, The
-Strategic Play, Newsletter Digest (your Substack emails), Axios: What Matters, and Slack: What You
-Missed (Women Defining AI).
+Every morning at `MORNING_AT` (default 06:30) and on demand, Claude writes a briefing:
+World News Radar, AI Breakthroughs, Company & Industry Watch (if `MORNING_COMPANY_WATCH` is set),
+Process Automation & Tooling Pulse,
+Newsletter Digest (your Substack emails), Axios: What Matters, and Slack: What You Missed (Women
+Defining AI). On the first Monday of each month it also includes The Strategic Play.
 
-- Sections 1-4 come from live web search and fetch, run server-side by Claude. No personal data is involved.
-- Sections 5-7 are gathered on the Mini: the last day's Substack newsletters and Axios emails from Gmail,
+- The web sections come from live web search and fetch, run server-side by Claude. No personal data is involved.
+- Newsletter, Axios and Slack items are gathered on the Mini: the last day's Substack newsletters and Axios emails from Gmail,
   and the last day's messages in Slack channels you're in (mentions of you ranked first). Only those
   items are sent, never other mail or your calendar; anything with an SSN- or card-like number is dropped.
   Each source fails independently and the briefing says what was unavailable.
-- `MORNING_ABOUT` (one line about you) tailors The Strategic Play.
+- `MORNING_ABOUT` (one line about you) tailors the briefing.
 - Slack setup: create a Slack app in the workspace with User Token Scopes `channels:read`,
   `channels:history`, `groups:read`, `groups:history`, `users:read`, install it, then store its User
   OAuth Token with `python -m app.secrets set-slack-token`.

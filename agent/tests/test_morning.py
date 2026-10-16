@@ -9,7 +9,7 @@ from app.slack_client import SlackClient, SlackError
 from tests.test_assistant import FakeClaude, Resp
 
 FULL = "\n".join(f"## {i}. {t}\n- **x** y [Source](https://e.com/{i})" for i, t in enumerate(
-    ["World News Radar", "AI & Agentic Operations Breakthroughs", "Process Automation & Tooling Pulse",
+    ["World News Radar", "AI Breakthroughs", "Company & Industry Watch", "Process Automation & Tooling Pulse",
      "The Strategic Play", "Newsletter Digest", "Axios: What Matters", "Slack: What You Missed"], 1))
 
 
@@ -46,8 +46,28 @@ def test_pause_turn_resends_the_turn_unchanged(db):
 
 
 def test_missing_sections_are_flagged(db):
-    out = morning.build(FakeClaude([final("## 1. World News Radar\n- a")]), db, "m", "medium", "UTC")
-    assert "The Strategic Play" in out["note"] and "Slack" in out["note"]
+    out = morning.build(FakeClaude([final("## 1. World News Radar\n- a")]), db, "m", "medium", "UTC",
+                        company="Acme Corp")
+    assert "Company & Industry Watch" in out["note"] and "Slack" in out["note"]
+
+
+def test_strategic_play_only_on_first_monday():
+    import datetime as dt
+    first_monday, second_monday, first_tuesday = dt.date(2026, 11, 2), dt.date(2026, 11, 9), dt.date(2026, 12, 1)
+    assert morning.strategy_day(first_monday)
+    assert not morning.strategy_day(second_monday) and not morning.strategy_day(first_tuesday)
+    assert "## 4. The Strategic Play" in morning.system_prompt(first_monday)
+    daily = morning.system_prompt(second_monday)
+    assert "Strategic Play" not in daily and "EXACTLY these 6 headings" in daily
+    assert "## 2. AI Breakthroughs" in daily and "Agentic Operations" not in daily
+    assert "Company & Industry Watch" not in daily                       # only when configured
+
+
+def test_company_watch_section_uses_configured_companies():
+    import datetime as dt
+    p = morning.system_prompt(dt.date(2026, 11, 9), "Acme Corp, Widget Co and the widget industry")
+    assert "EXACTLY these 7 headings" in p and "## 3. Company & Industry Watch" in p
+    assert p.count("Acme Corp, Widget Co and the widget industry") == 2   # section + research list
 
 
 def test_refusal_and_empty_raise(db):
