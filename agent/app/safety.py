@@ -1,5 +1,5 @@
-"""Sensitive-content detection. Anything flagged here must never leave the Mac mini
-(no cloud model) and is never auto-trashed.
+"""Sensitive-content detection. Anything flagged here is never auto-trashed, and its SSN,
+card and account numbers are scrubbed before the cloud model sees it (see privacy.py).
 
 This is deliberately conservative: a false positive costs a little privacy-preserving
 friction, a false negative could leak an SSN or trash a bank notice.
