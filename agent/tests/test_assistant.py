@@ -408,3 +408,124 @@ def test_expired_google_sign_in_is_explained_to_bruce(env):
     a.send("any email from coach?")
     res = claude.calls[-1][-1]["content"][0]
     assert res["is_error"] and "python -m app.auth_google" in res["content"]
+
+
+# ---- family hub additions: change / remove events, Family calendar, Todoist tasks -------------
+class FamilyCal(FakeCal):
+    def __init__(self):
+        super().__init__()
+        self.updated, self.deleted, self.all_day = [], [], []
+
+    def calendar_id(self, name):
+        return "fam-id" if name == "Family" else None
+
+    def create_event(self, title, start, end, location, description, attendees, calendar_id="primary"):
+        self.created.append((title, start, end, location, description, attendees, calendar_id))
+        return {"id": "new"}
+
+    def create_all_day_event(self, title, first, last, location, description, calendar_id="primary"):
+        self.all_day.append((title, first, last, calendar_id))
+        return {"id": "new"}
+
+    def update_event(self, calendar_id, event_id, changes):
+        self.updated.append((calendar_id, event_id, changes))
+        return {"id": event_id}
+
+    def delete_event(self, calendar_id, event_id):
+        self.deleted.append((calendar_id, event_id))
+
+
+class Todo:
+    def __init__(self):
+        self.added = []
+
+    def project_ids(self, names):
+        return {n: f"p-{n.lower()}" for n in names}
+
+    def add(self, content, project_id, labels=None, due_string="", section_id=""):
+        self.added.append((content, project_id, labels, due_string))
+
+
+@pytest.fixture
+def fam(tmp_path):
+    db = Database(tmp_path / "t.sqlite3")
+    cal, todo = FamilyCal(), Todo()
+    s = Settings(token="t", dry_run=True, max_trash_per_run=1, lookback_hours=24, triage_at="", data_dir=tmp_path)
+
+    def make(script):
+        return Assistant(FakeClaude(script), db, lambda: FakeMail(), lambda: cal, s, lambda: todo)
+    return make, db, cal, todo
+
+
+def test_family_event_goes_on_family_calendar(fam):
+    make, db, cal, _ = fam
+    a = make([tool("propose_event", {"title": "Brooks science fair", "start": "2026-11-12T18:00",
+                                     "end": "2026-11-12T19:00", "location": "", "description": "", "attendees": [],
+                                     "scheduling_task_id": 0, "calendar": "Family"}), text("ok")])
+    a.send("check")
+    a.approve(db.proposals_for(1)[0]["id"])
+    assert cal.created[0][0] == "Brooks science fair" and cal.created[0][-1] == "fam-id"
+
+
+def test_all_day_event(fam):
+    make, db, cal, _ = fam
+    a = make([tool("propose_event", {"title": "No school Elliott", "start": "2026-11-11", "end": "2026-11-11",
+                                     "location": "", "description": "", "attendees": [], "scheduling_task_id": 0,
+                                     "calendar": "Family"}), text("ok")])
+    a.send("check")
+    p = db.proposals_for(1)[0]
+    assert p["payload"]["when"] == "Wed, Nov 11 (all day)"
+    a.approve(p["id"])
+    assert cal.all_day == [("No school Elliott", dt.date(2026, 11, 11), dt.date(2026, 11, 11), "fam-id")]
+
+
+def test_event_change_only_on_approval(fam):
+    make, db, cal, _ = fam
+    a = make([tool("propose_event_change", {"calendar_id": "fam-id", "event_id": "e9", "current_title": "Elliott soccer practice",
+                                            "current_when": "Thu 7pm", "new_title": "", "new_start": "2026-11-12T17:00",
+                                            "new_end": "2026-11-12T18:30", "new_location": "", "reason": "Coach emailed"}),
+              text("ok")])
+    a.send("check")
+    p = db.proposals_for(1)[0]
+    assert p["kind"] == "event_change" and cal.updated == []
+    a.approve(p["id"])
+    cid, eid, ch = cal.updated[0]
+    assert (cid, eid) == ("fam-id", "e9") and ch["start"].hour == 17 and "title" not in ch
+
+
+def test_event_change_with_nothing_to_change_is_an_error(fam):
+    make, db, *_ = fam
+    a = make([tool("propose_event_change", {"calendar_id": "c", "event_id": "e", "current_title": "", "current_when": "",
+                                            "new_title": " ", "new_start": "", "new_end": "", "new_location": "",
+                                            "reason": ""}), text("ok")])
+    a.send("check")
+    assert db.proposals_for(1) == []
+
+
+def test_event_removal_and_reject(fam):
+    make, db, cal, _ = fam
+    a = make([tool("propose_event_removal", {"calendar_id": "fam-id", "event_id": "e1", "title": "Brooks game",
+                                             "when": "Sat", "reason": "Cancelled (rain)"}), text("ok")])
+    a.send("check")
+    pid = db.proposals_for(1)[0]["id"]
+    a.reject(pid)
+    assert cal.deleted == []
+
+
+def test_task_card_adds_to_todoist_with_person_label(fam):
+    make, db, _, todo = fam
+    a = make([tool("propose_task", {"content": "Sign permission slip", "person": "Brooks", "due": "Friday"}, "t1"),
+              tool("propose_task", {"content": "Buy diapers", "person": "Cece", "due": ""}, "t2"),
+              text("ok")])
+    a.send("check")
+    for p in db.proposals_for(1):
+        a.approve(p["id"])
+    assert todo.added == [("Sign permission slip", "p-family", ["Brooks"], "Friday"),
+                          ("Buy diapers", "p-cece", ["Cece"], "")]
+
+
+def test_add_check_sender(fam):
+    make, db, *_ = fam
+    a = make([tool("add_check_sender", {"sender": "@TeamSnap.com"}), text("ok")])
+    a.send("watch teamsnap")
+    assert db.get_meta_text("calcheck_senders") == "teamsnap.com"

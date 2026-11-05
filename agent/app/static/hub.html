@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Family Hub">
+  <meta name="theme-color" content="#f7f5f0">
+  <meta name="robots" content="noindex">
+  <link rel="apple-touch-icon" href="/static/icon-180.png">
+  <link rel="stylesheet" href="/static/hub.css">
+  <title>Cardona Family Hub</title>
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <h1>Cardona Family</h1>
+      <div id="today" class="today"></div>
+    </div>
+    <div id="clock" class="clock"></div>
+    <div class="weeknav">
+      <button id="thisweek" class="navbtn on">This week</button>
+      <button id="nextweek" class="navbtn">Next week</button>
+    </div>
+  </header>
+
+  <div id="legend" class="legend"></div>
+  <section id="banner" class="banner"></section>
+
+  <section class="panel week-panel">
+    <div id="week" class="week"></div>
+  </section>
+
+  <div class="lower">
+    <section class="panel">
+      <h2>Dinners</h2>
+      <ul id="dinners" class="dinners"></ul>
+    </section>
+    <section class="panel">
+      <h2>Homework</h2>
+      <div id="homework" class="homework"></div>
+    </section>
+    <section class="panel">
+      <h2>Groceries</h2>
+      <form id="addgrocery" class="addrow" autocomplete="off">
+        <input id="groceryInput" placeholder="Add an item…" maxlength="120" enterkeyhint="done">
+        <button>Add</button>
+      </form>
+      <div id="groceries" class="groceries"></div>
+    </section>
+  </div>
+
+  <section class="panel">
+    <h2>Tasks</h2>
+    <div id="tasks" class="tasks"></div>
+  </section>
+
+  <footer id="status" class="status"></footer>
+
+  <dialog id="login">
+    <form method="dialog" id="loginForm">
+      <h2>Connect the hub</h2>
+      <p>Enter the HUB_TOKEN from the Mac mini.</p>
+      <input id="tokenInput" type="password" autocomplete="off" required>
+      <button>Save</button>
+    </form>
+  </dialog>
+
+  <script src="/static/hub.js"></script>
+</body>
+</html>

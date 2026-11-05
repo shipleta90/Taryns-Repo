@@ -361,8 +361,30 @@ function proposalHtml(p) {
     buttons = `<button class="act" data-id="${p.id}" data-mode="send">Send</button>
       <button class="act secondary" data-id="${p.id}" data-mode="draft">Save draft</button>
       <button class="rej secondary" data-id="${p.id}">Don't send</button>`;
+  } else if (p.kind === "event_change") {
+    const ch = pl.changes || {};
+    body = `<div class="kind">Change calendar event</div>
+      <div class="field"><strong>${esc(pl.current_title)}</strong> ${pl.current_when ? "· " + esc(pl.current_when) : ""}</div>
+      ${ch.title ? `<div class="field">New title <strong>${esc(ch.title)}</strong></div>` : ""}
+      ${ch.start ? `<div class="field">New time <strong>${esc(fmtWhen(ch.start))}${ch.end ? " – " + esc(fmtWhen(ch.end)) : ""}</strong></div>` : ""}
+      ${ch.location ? `<div class="field">New place <strong>${esc(ch.location)}</strong></div>` : ""}
+      ${pl.reason ? `<div class="body">${esc(pl.reason)}</div>` : ""}`;
+    buttons = `<button class="act" data-id="${p.id}" data-mode="send">Update event</button>
+      <button class="rej secondary" data-id="${p.id}">Skip</button>`;
+  } else if (p.kind === "event_removal") {
+    body = `<div class="kind">Remove calendar event</div>
+      <div class="field"><strong>${esc(pl.title)}</strong> ${pl.when ? "· " + esc(pl.when) : ""}</div>
+      ${pl.reason ? `<div class="body">${esc(pl.reason)}</div>` : ""}`;
+    buttons = `<button class="act danger" data-id="${p.id}" data-mode="send">Remove</button>
+      <button class="rej secondary" data-id="${p.id}">Keep it</button>`;
+  } else if (p.kind === "task") {
+    body = `<div class="kind">Todoist task · ${esc(pl.person)}</div>
+      <div class="field"><strong>${esc(pl.content)}</strong></div>
+      ${pl.due ? `<div class="field">Due ${esc(pl.due)}</div>` : ""}`;
+    buttons = `<button class="act" data-id="${p.id}" data-mode="send">Add task</button>
+      <button class="rej secondary" data-id="${p.id}">Skip</button>`;
   } else {
-    body = `<div class="kind">Calendar event</div>
+    body = `<div class="kind">Calendar event${pl.calendar === "Family" ? " · Family" : ""}</div>
       <div class="field"><strong>${esc(pl.title)}</strong></div>
       <div class="field">${esc(pl.when || fmtWhen(pl.start) + " – " + fmtWhen(pl.end))}</div>
       ${pl.location ? `<div class="field">${esc(pl.location)}</div>` : ""}
@@ -446,6 +468,13 @@ $("composer").addEventListener("submit", (ev) => {
 $("chat-input").addEventListener("input", (ev) => {
   ev.target.style.height = "auto";
   ev.target.style.height = Math.min(ev.target.scrollHeight, 140) + "px";
+});
+$("calcheck").addEventListener("click", async (ev) => {
+  ev.target.disabled = true;
+  ev.target.textContent = "Checking…";
+  try { await api("/api/calendar-check/run", { method: "POST" }); } catch (e) { alert(e.message); }
+  // The check runs in the background; its cards arrive in this chat in a minute or two.
+  setTimeout(() => { ev.target.disabled = false; ev.target.textContent = "Check calendar"; loadChat(); }, 90 * 1000);
 });
 $("newchat").addEventListener("click", async () => {
   try { chatCache = await api("/api/chat/new", { method: "POST" }); renderChat(chatCache); } catch (e) { alert(e.message); }
