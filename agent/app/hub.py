@@ -31,7 +31,19 @@ BY_KEY = {p["key"]: p for p in PEOPLE}
 PARENTS = {"taryn", "phillip"}
 
 # Group words that mean several people. Extra ones come from HUB_ALIASES in .env.
-DEFAULT_ALIASES = {"boys": ["brooks", "elliott"], "kids": ["brooks", "elliott", "pierce"]}
+DEFAULT_ALIASES = {"boys": ["brooks", "elliott"], "kids": ["brooks", "elliott", "pierce"],
+                   "vc elite": ["brooks"]}          # Brooks's team
+
+# Adult things that show as "Private" on the kitchen screen (HUB_HIDE replaces this list).
+# Matched at the start of a word, any case: "pay" hides "Pay numb nuts", not "display".
+DEFAULT_HIDE = ("pay, numb nuts, bill, rent, mortgage, tax, invoice, interview, recruiter, botox, facial, "
+                "filler, function health, blood test, lab work, therapist, counseling, obgyn, gyn, mammogram, "
+                "dermatolog, lawyer, attorney, divorce, mediation, court, date night")
+
+
+def parse_hide(raw: str | None) -> list[str]:
+    raw = DEFAULT_HIDE if raw is None else raw
+    return [w.strip().lower() for w in raw.split(",") if w.strip()]
 
 
 def parse_aliases(raw: str) -> dict[str, list[str]]:
@@ -87,7 +99,7 @@ def kitchen_title(title: str, hide_words: list[str]) -> str:
     """Hide dollar amounts always; replace the whole title with "Private" if it contains a word
     from HUB_HIDE (the kids and Cece can see this screen)."""
     low = (title or "").lower()
-    if any(w and w in low for w in hide_words):
+    if any(w and re.search(rf"\b{re.escape(w)}", low) for w in hide_words):
         return "Private"
     return _MONEY.sub("$…", title or "").strip()
 
@@ -240,10 +252,12 @@ def _events(calendar, start: dt.date, cfg: HubConfig, tz: ZoneInfo) -> tuple[lis
         title = e.get("title", "")
         people = people_in(title, cfg.aliases)
         holiday = "holiday" in e.get("calendar", "").lower()
+        shown = kitchen_title(title, cfg.hide_words)
+        private = shown == "Private"
         item = {
-            "id": e.get("id"), "title": kitchen_title(title, cfg.hide_words),
-            "people": people or ["family"], "untagged": not people and not holiday,
-            "kind": "holiday" if holiday else kind_of(title, people, bool(e.get("all_day")), span),
+            "id": e.get("id"), "title": shown, "private": private,
+            "people": people or ["family"], "untagged": not people and not holiday and not private,
+            "kind": "holiday" if holiday else ("event" if private else kind_of(title, people, bool(e.get("all_day")), span)),
             "all_day": bool(e.get("all_day")), "time": _time_label(s_when),
             "start": s_day.isoformat(), "end": e_day.isoformat(), "days": span,
             "sort": s_when.isoformat() if s_when else s_day.isoformat(),

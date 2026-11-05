@@ -176,7 +176,7 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
     hub_cfg = hub_mod.HubConfig(
         timezone=settings.timezone,
         aliases=hub_mod.parse_aliases(settings.hub_aliases),
-        hide_words=[w.strip().lower() for w in settings.hub_hide.split(",") if w.strip()],
+        hide_words=hub_mod.parse_hide(settings.hub_hide),
         projects=dict(zip(("family", "cece", "groceries", "dinners"), names[:4])),
         skip_calendars=tuple(c.strip() for c in settings.hub_skip_calendars.split(",") if c.strip()),
     )

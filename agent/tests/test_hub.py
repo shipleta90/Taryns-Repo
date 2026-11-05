@@ -13,7 +13,7 @@ from tests.fakes import FakeLLM
 
 TZ = ZoneInfo("America/Los_Angeles")
 NOW = dt.datetime(2026, 11, 5, 9, 0, tzinfo=TZ)            # a Thursday
-ALIASES = hub.parse_aliases("vc elite=Elliott")
+ALIASES = hub.parse_aliases("")
 
 # A synthetic Classroom guardian summary in the real layout.
 SUMMARY = """Weekly summary for Elliott Cardona
@@ -55,7 +55,7 @@ Posted on Oct 27, 2026 by a teacher
     ("Snacks for Elliott's soccer game", ["elliott"]),
     ("Give gypsy flea meds", ["gypsy"]),
     ("Boys training", ["brooks", "elliott"]),
-    ("VC elite practice", ["elliott"]),
+    ("VC elite practice", ["brooks"]),
     ("Phillip / Dentist cleaning", ["phillip"]),
     ("CeCe off", ["cece"]),
     ("Move the car!", []),
@@ -87,6 +87,25 @@ def test_multi_day_parent_event_is_travel():
 def test_kitchen_title_hides_money_and_private_words():
     assert hub.kitchen_title("Pay rent - $1,162.44", []) == "Pay rent - $…"
     assert hub.kitchen_title("Botox Day Irvine", ["botox"]) == "Private"
+
+
+@pytest.mark.parametrize("title,private", [
+    ("Pay numb nuts - $1,162.44", True),
+    ("Interview with Hippocratic AI", True),
+    ("Botox Day Irvine", True),
+    ("Taryn facial", True),
+    ("Taryn function health test", True),
+    ("Brooks basketball game", False),
+    ("Pierce PT", False),
+    ("Display night at school", False),        # "pay" only at the start of a word
+    ("Family photo", False),
+])
+def test_default_adult_list(title, private):
+    assert (hub.kitchen_title(title, hub.parse_hide(None)) == "Private") is private
+
+
+def test_hide_list_can_be_replaced_or_cleared():
+    assert hub.parse_hide("botox") == ["botox"] and hub.parse_hide("") == []
 
 
 def test_aliases_ignore_unknown_people():
@@ -139,6 +158,7 @@ class HubCal:
             cal_ev("4", "Move the car!", "2026-11-05T13:00:00-08:00", "2026-11-05T13:00:00-08:00"),
             cal_ev("5", "Veterans Day", "2026-11-11", "2026-11-12", all_day=True, calendar="Holidays in United States"),
             cal_ev("6", "Pay rent $2,000", "2026-11-06T09:00:00-08:00", "2026-11-06T09:30:00-08:00"),
+            cal_ev("8", "Interview with Acme", "2026-11-06T11:00:00-08:00", "2026-11-06T11:30:00-08:00"),
             cal_ev("7", "Work standup", "2026-11-06T09:00:00-08:00", "2026-11-06T09:30:00-08:00", calendar="Work"),
         ]
         self.queries = []
@@ -229,7 +249,7 @@ class Sources:
 
 
 def cfg():
-    return hub.HubConfig(aliases=ALIASES, hide_words=[], skip_calendars=("Work",))
+    return hub.HubConfig(aliases=ALIASES, hide_words=hub.parse_hide(None), skip_calendars=("Work",))
 
 
 def test_build_week():
@@ -239,11 +259,12 @@ def test_build_week():
     assert days["2026-11-02"] == ["Brooks flag football practice"]
     # all-day trip spans Wed-Fri (end date is exclusive), shown first on each day
     assert days["2026-11-04"][0] == days["2026-11-06"][0] == "Phillip-NYC" and "Phillip-NYC" not in days["2026-11-07"]
-    assert "Pay rent $…" in days["2026-11-06"] and "Work standup" not in days["2026-11-06"]
+    assert days["2026-11-06"].count("Private") == 2 and "Work standup" not in days["2026-11-06"]
     assert [t["title"] for t in out["banner"]["travel"]] == ["Phillip-NYC"]
     assert [a["title"] for a in out["banner"]["appointments_today"]] == ["Pierce PT"]
     untagged = [e["title"] for e in out["untagged"]]
     assert "Move the car!" in untagged and "Veterans Day" not in untagged     # holidays never flagged
+    assert "Private" not in untagged                                          # never "who is this?" for private
     assert out["sunbasket"]["status"] == "coming"
 
 
@@ -285,7 +306,7 @@ def test_next_week_offset():
 def api(tmp_path):
     s = Settings(token="agent-secret", dry_run=True, max_trash_per_run=1, lookback_hours=24, triage_at="",
                  data_dir=tmp_path, morning_at="", followup_check_minutes=0, budget_sync_at="",
-                 hub_token="hub-secret", hub_aliases="vc elite=Elliott")
+                 hub_token="hub-secret")
     todo = FakeTodoist()
     app = create_app(s, gmail=HubGmail(), calendar=HubCal(), llm=FakeLLM(), todoist=todo)
     with TestClient(app) as c:

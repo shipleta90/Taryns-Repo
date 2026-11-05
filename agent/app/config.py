@@ -46,7 +46,7 @@ class Settings:
     # Family hub (kitchen screen + phones). HUB_TOKEN only opens the hub, never Bruce/budget/inbox.
     hub_token: str = ""
     hub_aliases: str = ""                # e.g. "vc elite=Elliott; boys=Brooks+Elliott"
-    hub_hide: str = ""                   # words that make an event show as "Private" on the hub
+    hub_hide: str | None = None          # words that make an event "Private" on the hub; None = built-in list
     hub_skip_calendars: str = ""         # calendar names never shown on the hub, comma-separated
     todoist_projects: str = "Family,Cece,Groceries,Dinners"
     family_calendar: str = "Family"      # where Bruce adds family events
@@ -88,7 +88,7 @@ def load_settings() -> Settings:
         claude_effort=os.environ.get("CLAUDE_EFFORT", "medium"),
         hub_token=os.environ.get("HUB_TOKEN", ""),
         hub_aliases=os.environ.get("HUB_ALIASES", ""),
-        hub_hide=os.environ.get("HUB_HIDE", ""),
+        hub_hide=os.environ.get("HUB_HIDE"),        # unset = built-in adult list (see hub.DEFAULT_HIDE)
         hub_skip_calendars=os.environ.get("HUB_SKIP_CALENDARS", ""),
         todoist_projects=os.environ.get("TODOIST_PROJECTS", "Family,Cece,Groceries,Dinners"),
         family_calendar=os.environ.get("FAMILY_CALENDAR", "Family"),

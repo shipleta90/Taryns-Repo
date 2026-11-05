@@ -47,7 +47,7 @@ def build_query(extra_senders: list[str] | None = None) -> str:
 PEOPLE_NOTE = (
     "Household: Taryn (mom; that's who you work for) and Phillip (dad) — parents; Brooks (11, Lincoln "
     "Middle School, emails from @smmusd.org); Elliott (13, Saint Monica Prep, emails from @smprep.org); "
-    "Pierce (toddler); Cece (Pierce's nanny); Gypsy (the dog). 'Boys' means Brooks and Elliott.")
+    "Pierce (toddler); Cece (Pierce's nanny); Gypsy (the dog). 'Boys' means Brooks and Elliott. 'VC Elite' is Brooks's team.")
 
 NOTE_TEMPLATE = """[App update: daily calendar check. Taryn isn't watching live; she'll see your message and cards in the Bruce tab later.]
 {people}
