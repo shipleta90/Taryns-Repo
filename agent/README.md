@@ -137,7 +137,8 @@ everyone's tasks (Taryn, Phillip, Brooks, Elliott, Cece, Gypsy).
 - **Private on a shared screen:** dollar amounts are hidden; events containing a word in `HUB_HIDE` show as "Private";
   calendars in `HUB_SKIP_CALENDARS` never show.
 - **Its own key.** The hub uses `HUB_TOKEN`, which opens the hub and nothing else (not Bruce, the budget or the inbox).
-  Open `/hub#t=<HUB_TOKEN>` once on each device; the link saves the key and removes it from the address bar.
+  Open `/hub#t=<HUB_TOKEN>` on each device (scan it as a QR code; never type it). The key stays in the link so
+  Home Screen icons keep working; the part after `#` is never sent to the server. The Connect box also accepts the whole link.
 
 Setup: create Todoist projects Family, Cece, Groceries, Dinners → copy your Todoist API token (Settings → Integrations
 → Developer) → `python -m app.secrets set-todoist-token` → set `HUB_TOKEN` in `.env` → restart.
