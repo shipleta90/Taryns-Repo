@@ -69,8 +69,10 @@ bar, cut it before presenting it.
    proteins across the week (don't repeat the same one twice) and vary
    cuisine/prep style so it doesn't feel repetitive week to week. Exactly
    one of the three should be built around the slow cooker — a
-   dump-and-go recipe with under 15 minutes of hands-on time, meant for a
-   day nobody has the bandwidth to stand at the stove. The other two
+   dump-and-go recipe with under 15 minutes of hands-on time. **The
+   slow-cooker dinner is always Sunday** (the Sunday right after the Friday
+   plan, so the week starts with dinner already done and leftovers for
+   Monday lunch). The other two
    follow the usual bar: sheet-pan, one-pot, or simple stovetop/oven meals,
    nothing with more than ~6 active steps. Note a toddler-friendly
    adjustment inline where a dish runs spicy, tough to chew, or otherwise
@@ -87,11 +89,12 @@ bar, cut it before presenting it.
 4. **Put it on the family hub (Todoist).** The kitchen hub reads dinners and
    groceries live from Todoist, so:
    - **Dinners:** add one task per dinner to the Todoist project **"Dinners"**
-     with a due date (`due_string` like "Monday"). Sunbasket weeks: also add
-     "Sunbasket: (dish name if the email says, else 'Sunbasket meal')" on
-     Monday and Tuesday, and put the planned dinners on Wednesday onward.
-     Normal weeks: Monday, Tuesday, Wednesday, with the slow-cooker dinner on
-     Wednesday. Don't duplicate a dinner already on that day.
+     with a due date (`due_string` like "Sunday"). **The slow-cooker dinner
+     always goes on Sunday** (the one right after the Friday run).
+     Normal weeks: slow cooker Sunday, the other two on Monday and Tuesday.
+     Sunbasket weeks: slow cooker Sunday, plus "Sunbasket: (dish name if the
+     email says, else 'Sunbasket meal')" on Monday and Tuesday.
+     Don't duplicate a dinner already on that day.
    - **Groceries:** hand the consolidated list to the `grocery` skill, which
      adds to the Todoist "Groceries" project without duplicates.
    - If Todoist can't be reached, still publish the artifact and say clearly in
@@ -115,8 +118,8 @@ Structure the artifact content as:
 
 - **Header**: "Week of [date range]"
 - **Three dinner cards**, one per night, each showing: night label (or
-  "Night 1" if not date-bound; mark the slow-cooker one clearly, e.g.
-  "Monday · slow cooker"), dish name, the protein, a one-line description,
+  "Night 1" if not date-bound; mark the slow-cooker one clearly:
+  "Sunday · slow cooker"), dish name, the protein, a one-line description,
   and any toddler-adjustment note.
 - **Grocery list**: grouped by store section as in step 3, each item as a
   checkable line (`- [ ] item — quantity`) so it works as a shopping
