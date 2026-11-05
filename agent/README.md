@@ -5,7 +5,7 @@ Data stays on your machine; nothing is exposed to the public internet.
 
 **Status:** chat assistant (Gmail + Calendar), Chief-of-Staff morning briefing, house budget, inbox
 triage and the web app. (The older email-only briefing is turned off: `BRIEFING_ENABLED=false`.)
-Next: house budget (SimpleFIN), grocery lists, appointments from iMessage, Slack drafts.
+Also: the Cardona Family Hub (kitchen screen) and Bruce's daily calendar check. Next: appointments from iMessage, Slack drafts.
 
 ## How it's reached (no public domain, no dynamic DNS, no open ports)
 
@@ -113,6 +113,44 @@ orders/newsletters folded away.
 - Reads the plain-text body (quoted replies and links stripped, first ~2000 characters).
   Health/legal/financial items get a "private" badge.
 - If Ollama is down, the briefing falls back to plain previews and says so.
+
+## Cardona Family Hub (kitchen screen + phones)
+
+A Skylight-style week view at `https://<mini>.<tailnet>.ts.net/hub`, color-coded by person: the calendar,
+dinners, Sunbasket, groceries, kids' activities, parent travel and flights, appointments, homework, and
+everyone's tasks (Taryn, Phillip, Brooks, Elliott, Cece, Gypsy).
+
+- **Live, never stored.** Every load (and every 5 minutes) it reads Google Calendar, Gmail and Todoist fresh.
+  Nothing is written to the database or disk, and the browser is told not to cache it. It dims 9pm–6am.
+- **Who's who:** the name in the event title ("Brooks flag football", "Snacks for Elliott's game",
+  "Give gypsy flea meds"). "Boys" = Brooks + Elliott. Add nicknames in `HUB_ALIASES` (e.g. `vc elite=Elliott`).
+  Events with no name get a dashed border and a red "?" so titles get fixed.
+- **Travel & flights:** "Phillip-NYC", "Taryn in Irvine" or a multi-day event with a parent's name; flights are the
+  "Flight: LAX to AUS" events Google adds from Gmail.
+- **Sunbasket:** the newest email from sunbasket.com in the last 14 days (Phillip forwards them to Taryn).
+- **Homework:** Google Classroom's weekly guardian summary (missing + due next week), plus the last week's emails
+  from each school (@smmusd.org for Brooks, @smprep.org for Elliott) and Aeries.
+- **Tasks, groceries, dinners:** Todoist projects `Family`, `Cece`, `Groceries`, `Dinners`. A task's person is its
+  label (`@Brooks`, `@Elliott`, `@Cece`, `@Gypsy`, `@Taryn`, `@Phillip`); Cece's project is hers by default.
+  Kids check things off on the kitchen screen with two taps (the second confirms). Adding a grocery item from the
+  hub goes straight into Todoist.
+- **Private on a shared screen:** dollar amounts are hidden; events containing a word in `HUB_HIDE` show as "Private";
+  calendars in `HUB_SKIP_CALENDARS` never show.
+- **Its own key.** The hub uses `HUB_TOKEN`, which opens the hub and nothing else (not Bruce, the budget or the inbox).
+  Open `/hub#t=<HUB_TOKEN>` once on each device; the link saves the key and removes it from the address bar.
+
+Setup: create Todoist projects Family, Cece, Groceries, Dinners → copy your Todoist API token (Settings → Integrations
+→ Developer) → `python -m app.secrets set-todoist-token` → set `HUB_TOKEN` in `.env` → restart.
+
+## Calendar check (Bruce, after the morning briefing)
+
+Right after the 6:30 briefing (and whenever you tap **Check calendar** in the Bruce tab), Bruce does ONE targeted Gmail
+search of the last 24 hours (schools, team apps, invites, doctors, the vet, airlines, plus subjects like "practice",
+"rescheduled", "cancelled", "flight"; no promotions, social or Classroom homework summaries) and reads the next 30 days
+of calendar. He opens any email he needs to (no limit) and leaves cards in the Bruce tab:
+**Add** (on the Family calendar, name first), **Change**, **Remove**, and **Todoist task** for things like permission
+slips. Nothing changes until you tap. Ask him to "watch emails from club.org" to add a sender. `CALENDAR_CHECK=false`
+turns it off.
 
 ## Setup on the Mac mini
 

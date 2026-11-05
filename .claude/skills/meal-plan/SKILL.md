@@ -42,6 +42,15 @@ bar, cut it before presenting it.
 
 ## Workflow
 
+0. **Check Sunbasket first.** Sunbasket arrives on Mondays some weeks and
+   covers **2 dinners**. Search Gmail (`from:sunbasket.com newer_than:10d`;
+   Phillip forwards these to Taryn). Newest email decides: a shipped /
+   on-its-way / order-confirmed email means a box is coming, so plan **2 fewer
+   dinners** (keep the slow-cooker one) and leave their ingredients off the
+   grocery list; a "skipped" email, or no Sunbasket email at all, means a
+   normal week. Say which in the summary ("Sunbasket week: 1 dinner planned +
+   2 Sunbasket nights").
+
 1. **Determine the run mode.**
    - **Automated (Friday Routine) run**: the prompt says so explicitly, or
      there's no live back-and-forth possible. Skip all questions — proceed
@@ -75,7 +84,20 @@ bar, cut it before presenting it.
    Dairy & Eggs, Pantry/Dry Goods, Frozen, Other. Skip a section header if
    it would be empty.
 
-4. **Publish as an Artifact.** Load the `artifact-design` skill before
+4. **Put it on the family hub (Todoist).** The kitchen hub reads dinners and
+   groceries live from Todoist, so:
+   - **Dinners:** add one task per dinner to the Todoist project **"Dinners"**
+     with a due date (`due_string` like "Monday"). Sunbasket weeks: also add
+     "Sunbasket: (dish name if the email says, else 'Sunbasket meal')" on
+     Monday and Tuesday, and put the planned dinners on Wednesday onward.
+     Normal weeks: Monday, Tuesday, Wednesday, with the slow-cooker dinner on
+     Wednesday. Don't duplicate a dinner already on that day.
+   - **Groceries:** hand the consolidated list to the `grocery` skill, which
+     adds to the Todoist "Groceries" project without duplicates.
+   - If Todoist can't be reached, still publish the artifact and say clearly in
+     the reply that the hub wasn't updated.
+
+5. **Publish as an Artifact.** Load the `artifact-design` skill before
    writing the page — this is a real deliverable the household will look at
    on a phone in the kitchen or at the store, not a throwaway. Use the
    output format below as the content structure; let artifact-design guide
@@ -83,7 +105,7 @@ bar, cut it before presenting it.
    a title like "Week of [Month Day]" so repeat weeks are distinguishable
    in the artifact gallery.
 
-5. **Hand off.** Reply with the artifact link and a one-line summary of the
+6. **Hand off.** Reply with the artifact link and a one-line summary of the
    three dinners. On an automated run, this reply is the entire output —
    there's no user present to react to it, so don't end with a question.
 
@@ -105,7 +127,7 @@ Structure the artifact content as:
 Three dinners, one of them slow-cooker, and dinner-only is the default
 scope — don't expand to seven nights, lunches, or breakfasts unless the
 user asks for that explicitly in the request. Conversely, don't shrink
-below three, don't drop the slow-cooker night, and don't skip the grocery
+below three (except a Sunbasket week: one planned dinner plus the two Sunbasket nights), don't drop the slow-cooker night, and don't skip the grocery
 list even if the user only asked "what's for dinner" — the list is the
 point of the skill, not an optional extra.
 

@@ -8,7 +8,7 @@ import secrets
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -18,6 +18,8 @@ from .db import Database
 from . import briefing as briefing_mod
 from . import budget_service
 from . import morning as morning_mod
+from . import hub as hub_mod
+from . import calcheck
 from .assistant import Assistant
 from .llm import LocalLLM
 from .scheduler import daily
@@ -73,13 +75,21 @@ class ImportRequest(BaseModel):
     csv: str
 
 
+class GroceryRequest(BaseModel):
+    item: str
+
+
 def create_app(settings: Settings | None = None, gmail=None, db: Database | None = None,
                llm: LocalLLM | None = None, calendar=None, claude=None, slack=None,
-               simplefin=None) -> FastAPI:
+               simplefin=None, todoist=None) -> FastAPI:
     settings = settings or load_settings()
     db = db or Database(settings.db_path)
     if not settings.token:
         raise RuntimeError("AGENT_TOKEN is not set; refusing to start without auth.")
+    if settings.hub_token and secrets.compare_digest(settings.hub_token, settings.token):
+        raise RuntimeError("HUB_TOKEN must be different from AGENT_TOKEN (the kitchen screen must not "
+                           "be able to open Bruce, the budget or the inbox).")
+    injected = {"gmail": gmail, "calendar": calendar, "todoist": todoist}
 
     def get_gmail():
         nonlocal gmail
@@ -127,8 +137,58 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
             slack = SlackClient(token)
         return slack
 
+    def get_todoist():
+        """A Todoist client, or None when no token has been saved yet."""
+        if injected["todoist"] is not None:
+            return injected["todoist"]
+        from .secrets import todoist_token
+        from .todoist_client import Todoist
+        token = todoist_token()
+        return Todoist(token) if token else None
+
     def get_assistant() -> Assistant:
-        return Assistant(get_claude(), db, get_gmail, get_calendar, settings)
+        return Assistant(get_claude(), db, get_gmail, get_calendar, settings, get_todoist)
+
+    class HubSources:
+        """Fresh Google clients for every hub request: the Google client library isn't safe to
+        share across threads, and the kitchen screen and phones can load at the same time."""
+
+        @staticmethod
+        def calendar():
+            if injected["calendar"] is not None:
+                return injected["calendar"]
+            from .auth_google import CALENDAR_SCOPE, load_credentials
+            from .calendar_client import GoogleCalendar
+            return GoogleCalendar(load_credentials(require=CALENDAR_SCOPE), settings.timezone)
+
+        @staticmethod
+        def gmail():
+            if injected["gmail"] is not None:
+                return injected["gmail"]
+            from .auth_google import load_credentials
+            from .gmail_client import GoogleGmail
+            return GoogleGmail(load_credentials())
+
+        todoist = staticmethod(get_todoist)
+
+    names = [n.strip() for n in settings.todoist_projects.split(",")]
+    names += ["Family", "Cece", "Groceries", "Dinners"][len(names):]
+    hub_cfg = hub_mod.HubConfig(
+        timezone=settings.timezone,
+        aliases=hub_mod.parse_aliases(settings.hub_aliases),
+        hide_words=hub_mod.parse_hide(settings.hub_hide),
+        projects=dict(zip(("family", "cece", "groceries", "dinners"), names[:4])),
+        skip_calendars=tuple(c.strip() for c in settings.hub_skip_calendars.split(",") if c.strip()),
+    )
+
+    def require_hub(authorization: str = Header(default="")) -> None:
+        """The hub accepts its own HUB_TOKEN (kitchen screen, Phillip's phone) or AGENT_TOKEN."""
+        scheme, _, token = authorization.partition(" ")
+        ok = scheme.lower() == "bearer" and token and (
+            secrets.compare_digest(token, settings.token)
+            or (settings.hub_token and secrets.compare_digest(token, settings.hub_token)))
+        if not ok:
+            raise HTTPException(status_code=401, detail="unauthorized")
 
     morning_state = {"running": False, "error": None}
 
@@ -186,6 +246,27 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
             morning_state["error"] = str(exc)[:300]
         finally:
             morning_state["running"] = False
+        if settings.calendar_check:
+            await run_calendar_check()
+
+    calcheck_state = {"running": False, "error": None, "last": None}
+
+    async def run_calendar_check():
+        """Bruce compares the last day's family/school/appointment email with the next 30 days of
+        calendar and puts each suggested add/change/removal in the Bruce tab as a card."""
+        if calcheck_state["running"]:
+            return
+        calcheck_state.update(running=True, error=None)
+        try:
+            note = await asyncio.to_thread(calcheck.gather_note, get_gmail(), get_calendar(), settings, db)
+            async with chat_lock:
+                await asyncio.to_thread(get_assistant().notify, note)
+            calcheck_state["last"] = dt.datetime.now().isoformat(timespec="minutes")
+        except Exception as exc:
+            log.exception("calendar check failed")
+            calcheck_state["error"] = str(exc)[:300]
+        finally:
+            calcheck_state["running"] = False
 
     chat_lock = asyncio.Lock()
     triage_lock = asyncio.Lock()
@@ -234,7 +315,7 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
         # Make the phone re-check the app's files on every load (a cheap 304 when unchanged).
         # Without this, iOS can keep an old app.js after an update and pair it with new HTML.
         response = await call_next(request)
-        if not request.url.path.startswith("/api/"):
+        if not request.url.path.startswith("/api/") and "cache-control" not in response.headers:
             response.headers["Cache-Control"] = "no-cache"
         return response
 
@@ -411,6 +492,70 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
             digest = hashlib.sha256((STATIC / name).read_bytes()).hexdigest()[:10]
             html = html.replace(f"/static/{name}\"", f"/static/{name}?v={digest}\"")
         return HTMLResponse(html)
+
+    # --- family hub (live; nothing stored) -------------------------------------------------
+    @app.get("/hub")
+    def hub_page():
+        html = (STATIC / "hub.html").read_text()
+        for name in ("hub.css", "hub.js"):
+            digest = hashlib.sha256((STATIC / name).read_bytes()).hexdigest()[:10]
+            html = html.replace(f"/static/{name}\"", f"/static/{name}?v={digest}\"")
+        return HTMLResponse(html, headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/hub", dependencies=[Depends(require_hub)])
+    async def hub_data(week: int = 0):
+        data = await asyncio.to_thread(hub_mod.build, HubSources, hub_cfg, week)
+        return JSONResponse(data, headers={"Cache-Control": "no-store"})
+
+    @app.post("/api/hub/tasks/{task_id}/close", dependencies=[Depends(require_hub)])
+    async def hub_close(task_id: str):
+        t = get_todoist()
+        if t is None:
+            raise HTTPException(status_code=409, detail="Todoist isn't connected yet.")
+
+        def close():
+            # Only tasks in the hub's own projects can be checked off from the kitchen screen.
+            allowed = set(t.project_ids(list(hub_cfg.projects.values())).values())
+            if str(t.task(task_id).get("project_id")) not in {str(a) for a in allowed}:
+                raise PermissionError
+            t.close(task_id)
+        try:
+            await asyncio.to_thread(close)
+        except PermissionError:
+            raise HTTPException(status_code=403, detail="not a hub task")
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc)[:200])
+        return {"ok": True}
+
+    @app.post("/api/hub/groceries", dependencies=[Depends(require_hub)])
+    async def hub_add_grocery(req: GroceryRequest):
+        item = " ".join(req.item.split())[:120]
+        if not item:
+            raise HTTPException(status_code=400, detail="empty item")
+        t = get_todoist()
+        if t is None:
+            raise HTTPException(status_code=409, detail="Todoist isn't connected yet.")
+
+        def add():
+            pid = t.project_ids([hub_cfg.projects["groceries"]]).get(hub_cfg.projects["groceries"])
+            if not pid:
+                raise RuntimeError(f"No Todoist project named {hub_cfg.projects['groceries']!r}.")
+            t.add(item, pid)
+        try:
+            await asyncio.to_thread(add)
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc)[:200])
+        return {"ok": True}
+
+    @app.post("/api/calendar-check/run", status_code=202, dependencies=[Depends(require_auth)])
+    async def calendar_check_run():
+        if not calcheck_state["running"]:
+            asyncio.create_task(run_calendar_check())
+        return {"started": True}
+
+    @app.get("/api/calendar-check", dependencies=[Depends(require_auth)])
+    def calendar_check_status():
+        return calcheck_state
 
     @app.get("/sw.js")
     def sw():  # served from root so its scope covers the whole app

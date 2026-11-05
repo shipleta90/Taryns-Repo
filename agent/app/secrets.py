@@ -3,6 +3,7 @@
     python -m app.secrets set-anthropic-key     # paste your key when asked (input is hidden)
     python -m app.secrets set-slack-token       # your Slack app's User OAuth Token (xoxp-...)
     python -m app.secrets set-simplefin         # a SimpleFIN Setup Token (read-only bank feed)
+    python -m app.secrets set-todoist-token     # Todoist API token (Settings > Integrations > Developer)
 """
 import getpass
 import os
@@ -12,11 +13,14 @@ SERVICE = "personal-agent"
 ANTHROPIC = "anthropic-api-key"
 SLACK = "slack-user-token"
 SIMPLEFIN = "simplefin-access-url"
+TODOIST = "todoist-api-token"
 
 # command -> (keychain account, prompt, required prefix)
 COMMANDS = {
     "set-anthropic-key": (ANTHROPIC, "Paste your Anthropic API key (hidden): ", "sk-ant-"),
     "set-slack-token": (SLACK, "Paste your Slack User OAuth Token (hidden): ", "xoxp-"),
+    # Todoist tokens are 40 hex characters with no fixed prefix.
+    "set-todoist-token": (TODOIST, "Paste your Todoist API token (hidden): ", ""),
 }
 
 
@@ -36,6 +40,10 @@ def anthropic_key() -> str | None:
 
 def slack_token() -> str | None:
     return _get(SLACK, "SLACK_USER_TOKEN")
+
+
+def todoist_token() -> str | None:
+    return _get(TODOIST, "TODOIST_API_TOKEN")
 
 
 def simplefin_access_url() -> str | None:

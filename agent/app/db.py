@@ -244,6 +244,16 @@ class Database:
         row = self.conn.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
         return None if row is None else float(row["value"])
 
+    def set_meta_text(self, key: str, value: str) -> None:
+        """Text values share the meta table (SQLite keeps non-numeric text as text)."""
+        with self.conn:
+            self.conn.execute("INSERT INTO meta(key, value) VALUES (?, ?)"
+                              " ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
+
+    def get_meta_text(self, key: str) -> str | None:
+        row = self.conn.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+        return None if row is None else str(row["value"])
+
     # chat (append-only: rows are never edited or deleted, see assistant.py)
     def add_chat(self, conversation_id: int, role: str, content: list, display_text: str | None = None) -> int:
         with self.conn:
