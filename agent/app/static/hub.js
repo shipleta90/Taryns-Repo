@@ -6,15 +6,27 @@ const REFRESH_MS = 5 * 60 * 1000;
 let data = null;
 let week = 0;
 
-// The hub token is the only thing kept on this device. Opening /hub#t=TOKEN once saves it.
+// The hub key travels in the link (/hub#t=KEY). It stays in the address so that a Home Screen
+// icon (which on iPhone does NOT share storage with Safari) and the kitchen screen keep working
+// when reopened. The part after # is never sent to the server or written to its logs.
+function keyFrom(text) {
+  const raw = String(text || "").trim();
+  const m = raw.match(/[#&?]t=([^&\s]+)/);
+  return (m ? decodeURIComponent(m[1]) : raw).trim();
+}
+let memKey = "";
 const store = {
-  get() { try { return localStorage.getItem("hubToken") || ""; } catch { return ""; } },
-  set(v) { try { localStorage.setItem("hubToken", v); } catch { /* private mode: ask again next time */ } },
+  get() {
+    if (memKey) return memKey;
+    try { return localStorage.getItem("hubToken") || ""; } catch { return ""; }
+  },
+  set(v) {
+    memKey = v;
+    try { localStorage.setItem("hubToken", v); } catch { /* storage blocked: the link still carries it */ }
+    if (v && !location.hash.includes("t=")) history.replaceState(null, "", `${location.pathname}#t=${encodeURIComponent(v)}`);
+  },
 };
-(function tokenFromLink() {
-  const m = location.hash.match(/[#&]t=([^&]+)/);
-  if (m) { store.set(decodeURIComponent(m[1])); history.replaceState(null, "", location.pathname); }
-})();
+if (/[#&]t=/.test(location.hash)) store.set(keyFrom(location.hash));
 
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -40,7 +52,9 @@ function askToken() {
   if (!d.open) d.showModal();
 }
 $("loginForm").addEventListener("submit", () => {
-  store.set($("tokenInput").value.trim());
+  // Accepts the key or the whole hub link pasted in.
+  history.replaceState(null, "", location.pathname);
+  store.set(keyFrom($("tokenInput").value));
   load();
 });
 
