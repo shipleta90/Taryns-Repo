@@ -112,6 +112,38 @@ button { font: inherit; cursor: pointer; }
 dialog { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: var(--ink); max-width: 90vw; }
 dialog input { font: inherit; width: 100%; padding: 8px; margin: 8px 0; }
 
+/* ---- Today view: big type for a small kitchen screen (iPad mini) ---- */
+body.today-mode .weeknav, body.today-mode #banner, body.today-mode .week-panel,
+body.today-mode .lower, body.today-mode .tasks-panel { display: none; }
+body.today-mode .legend { margin: 6px 0 8px; }
+body.today-mode h1 { font-size: 24px; }
+body.today-mode .today { font-size: 17px; }
+body.today-mode .clock { font-size: 38px; }
+.todayview[hidden] { display: none; }
+.tv-strip { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.tv-strip .flag { font-size: 20px; padding: 8px 14px; }
+.tv-strip .flag.dinner { border-left-color: #d97706; font-weight: 600; }
+.tv-days { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
+.tv-day { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; }
+.tv-day.is-today { background: var(--today); }
+.tv-day h3 { margin: 0 0 8px; font-size: 22px; display: flex; justify-content: space-between; gap: 6px; }
+.tv-day h3 span { color: var(--muted); font-weight: 500; font-size: 16px; }
+.tv-day .ev { font-size: 19px; padding: 7px 9px; margin-bottom: 6px; border-left-width: 7px; }
+.tv-day .ev .t { font-size: 15px; }
+.tv-more { color: var(--muted); font-size: 15px; padding-left: 4px; }
+.tv-bottom { display: grid; grid-template-columns: 1fr 260px; gap: 10px; }
+.tv-tasks { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px 10px; align-content: start;
+            background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; }
+.tv-tasks .col h3 { font-size: 18px; }
+.tv-tasks .task { font-size: 17px; padding: 8px 10px; }
+.tv-tasks .col h3 { margin-bottom: 4px; }
+.tv-groceries { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; }
+.tv-groceries input, .tv-groceries button { font-size: 18px; }
+@media (orientation: portrait) {
+  .tv-bottom { grid-template-columns: 1fr; }
+}
+body.today-mode .clock { display: block; }
+
 /* Phones: today first, one column. */
 @media (max-width: 760px) {
   h1 { font-size: 22px; }

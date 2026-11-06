@@ -503,8 +503,9 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
         return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
     @app.get("/api/hub", dependencies=[Depends(require_hub)])
-    async def hub_data(week: int = 0):
-        data = await asyncio.to_thread(hub_mod.build, HubSources, hub_cfg, week)
+    async def hub_data(week: int = 0, start: str = ""):
+        # start=today: the 7 days from today (used by the small-screen Today view)
+        data = await asyncio.to_thread(hub_mod.build, HubSources, hub_cfg, week, None, start == "today")
         return JSONResponse(data, headers={"Cache-Control": "no-store"})
 
     @app.post("/api/hub/tasks/{task_id}/close", dependencies=[Depends(require_hub)])

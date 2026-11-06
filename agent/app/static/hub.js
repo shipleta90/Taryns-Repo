@@ -5,6 +5,11 @@ const $ = (id) => document.getElementById(id);
 const REFRESH_MS = 5 * 60 * 1000;
 let data = null;
 let week = 0;
+// "today" = big 3-day view for small kitchen screens; "week" = the full week. The view in the
+// link (?view=today) is this screen's home view; it drifts back to it after a few minutes.
+const homeView = new URLSearchParams(location.search).get("view") === "today" ? "today" : "week";
+let view = homeView;
+let driftTimer = null;
 
 // The hub key travels in the link (/hub#t=KEY). It stays in the address so that a Home Screen
 // icon (which on iPhone does NOT share storage with Safari) and the kitchen screen keep working
@@ -183,14 +188,79 @@ function renderStatus() {
     errs.map(([k, v]) => ` · <span class="err">${esc(k)} unavailable: ${esc(v)}</span>`).join("");
 }
 
-function render() {
-  renderLegend(); renderBanner(); renderWeek(); renderDinners(); renderHomework(); renderGroceries(); renderTasks(); renderStatus();
+function dinnerText(m) {
+  return m.sunbasket ? `${m.content.replace(/^\s*sunbasket\s*[:\-–]\s*/i, "")} 📦` : m.content;
 }
+
+function renderToday() {
+  const days = data.days.slice(0, 3);
+  const strip = [];
+  const tonight = (data.dinners[data.today] || []).map(dinnerText).join(" / ");
+  strip.push(`<div class="flag dinner">🍽️ Tonight: ${esc(tonight || "not planned")}</div>`);
+  if (data.sunbasket?.status && data.sunbasket.status !== "unknown") strip.push(`<div class="flag">${esc(data.sunbasket.text)}</div>`);
+  const seen = new Set();
+  for (const t of data.banner.travel) {
+    if (seen.has(t.title)) continue;
+    seen.add(t.title);
+    strip.push(`<div class="flag" style="border-left-color:${esc(color(t.people[0]))}">${t.kind === "flight" ? "✈️" : "🧳"} ${esc(t.title)}</div>`);
+  }
+  $("tvStrip").innerHTML = strip.join("");
+
+  const MAX = 6;
+  $("tvDays").innerHTML = days.map((d, i) => {
+    const name = i === 0 ? "Today" : i === 1 ? "Tomorrow" : dayLabel(d.date, { weekday: "long" });
+    // Multi-day trips are already in the strip above, so they don't repeat in every column.
+    const list = d.events.filter((e) => !(e.kind === "travel" && e.days > 1));
+    const evs = list.slice(0, MAX).map(evHtml).join("") || '<div class="empty">Nothing planned</div>';
+    const more = list.length > MAX ? `<div class="tv-more">+${list.length - MAX} more · tap Full week</div>` : "";
+    return `<div class="tv-day ${i === 0 ? "is-today" : ""}"><h3>${esc(name)} <span>${esc(dayLabel(d.date, { month: "short", day: "numeric" }))}</span></h3>${evs}${more}</div>`;
+  }).join("");
+
+  if (data.errors.todoist) {
+    $("tvTasks").innerHTML = `<div class="empty">${esc(data.errors.todoist)}</div>`;
+    $("tvGroceryCount").textContent = "";
+    return;
+  }
+  // Tasks due by tomorrow (or undated), up to 3 per person; people with nothing are left out.
+  const soon = days[1].date;
+  // Kids and Cece first: they use the kitchen screen most.
+  const order = ["brooks", "elliott", "pierce", "cece", "gypsy", "family", "taryn", "phillip"];
+  const people = order.map((k) => data.people.find((p) => p.key === k)).filter(Boolean);
+  const cols = people.map((p) => {
+    const list = (data.tasks[p.key] || []).filter((t) => !t.due || t.due <= soon).slice(0, 3);
+    if (!list.length) return "";
+    return `<div class="col" style="--c:${esc(p.color)}"><h3><span class="dot" style="background:${esc(p.color)}"></span>${esc(p.name)}</h3>
+      ${list.map((t) => checkBtn(`task ${t.overdue ? "overdue" : ""}`, t, t.content)).join("")}</div>`;
+  }).join("");
+  $("tvTasks").innerHTML = cols || '<div class="empty">No tasks due today 🎉</div>';
+  const n = (data.groceries || []).reduce((sum, g) => sum + g.items.length, 0);
+  $("tvGroceryCount").textContent = n ? `${n} item${n > 1 ? "s" : ""} on the list` : "List is empty";
+}
+
+function render() {
+  renderLegend(); renderStatus();
+  if (view === "today") { renderToday(); return; }
+  renderBanner(); renderWeek(); renderDinners(); renderHomework(); renderGroceries(); renderTasks();
+}
+
+function setView(v) {
+  view = v;
+  // Keep the view in the link, so "Add to Home Screen" saves whichever view is showing.
+  history.replaceState(null, "", `${location.pathname}${v === "today" ? "?view=today" : ""}${location.hash}`);
+  document.body.classList.toggle("today-mode", v === "today");
+  $("todayview").hidden = v !== "today";
+  $("viewbtn").textContent = v === "today" ? "Full week" : "Today";
+  clearTimeout(driftTimer);
+  if (v !== homeView) driftTimer = setTimeout(() => setView(homeView), 3 * 60 * 1000);
+  if (v === "today") { week = 0; }
+  load();
+}
+$("viewbtn").addEventListener("click", () => setView(view === "today" ? "week" : "today"));
 
 async function load() {
   if (!store.get()) { askToken(); return; }
   try {
-    data = await api(`/api/hub?week=${week}`);
+    data = await api(view === "today" ? "/api/hub?start=today" : `/api/hub?week=${week}`);
     render();
   } catch (e) {
     $("status").innerHTML = `<span class="err">Can't reach the hub: ${esc(e.message)}. Retrying in a minute.</span>`;
@@ -215,14 +285,18 @@ document.addEventListener("click", async (ev) => {
   catch (e) { btn.classList.remove("done"); alert(e.message); }
 });
 
-$("addgrocery").addEventListener("submit", async (ev) => {
-  ev.preventDefault();
-  const item = $("groceryInput").value.trim();
-  if (!item) return;
-  $("groceryInput").value = "";
-  try { await api("/api/hub/groceries", { method: "POST", body: JSON.stringify({ item }) }); load(); }
-  catch (e) { alert(e.message); $("groceryInput").value = item; }
-});
+function groceryForm(formId, inputId) {
+  $(formId).addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const item = $(inputId).value.trim();
+    if (!item) return;
+    $(inputId).value = "";
+    try { await api("/api/hub/groceries", { method: "POST", body: JSON.stringify({ item }) }); load(); }
+    catch (e) { alert(e.message); $(inputId).value = item; }
+  });
+}
+groceryForm("addgrocery", "groceryInput");
+groceryForm("tvAdd", "tvGroceryInput");
 
 function setWeek(w) {
   week = w;
@@ -237,4 +311,4 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) load
 tick();
 setInterval(tick, 20 * 1000);
 setInterval(() => { if (week === 1) setWeek(0); else load(); }, REFRESH_MS);   // the screen drifts back to this week
-load();
+setView(homeView);   // also does the first load

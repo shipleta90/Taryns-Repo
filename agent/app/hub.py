@@ -366,12 +366,14 @@ def _todoist(todoist, cfg: HubConfig, start: dt.date, today: dt.date) -> dict:
     return {"tasks": tasks, "groceries": groceries, "dinners": dinners, "missing_projects": missing}
 
 
-def build(sources, cfg: HubConfig, offset: int = 0, now: dt.datetime | None = None) -> dict:
-    """sources: object with calendar(), gmail(), todoist() factories (each may raise)."""
+def build(sources, cfg: HubConfig, offset: int = 0, now: dt.datetime | None = None,
+          from_today: bool = False) -> dict:
+    """sources: object with calendar(), gmail(), todoist() factories (each may raise).
+    from_today: the 7 days starting today (the small-screen "Today" view) instead of Mon-Sun."""
     tz = ZoneInfo(cfg.timezone)
     now = now or dt.datetime.now(tz)
     today = now.date()
-    start = week_start(today, max(0, min(int(offset), 1)))
+    start = today if from_today else week_start(today, max(0, min(int(offset), 1)))
     out: dict = {
         "generated_at": now.isoformat(timespec="seconds"),
         "today": today.isoformat(),
