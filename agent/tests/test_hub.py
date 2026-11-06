@@ -295,6 +295,19 @@ def test_each_source_fails_on_its_own():
     assert out["sunbasket"]["status"] == "coming" and out["homework"]["elliott"]["due"]
 
 
+def test_from_today_crosses_the_weekend():
+    sat = dt.datetime(2026, 11, 7, 9, 0, tzinfo=TZ)
+    out = hub.build(Sources(FakeTodoist()), cfg(), now=sat, from_today=True)
+    assert [d["date"] for d in out["days"]][:3] == ["2026-11-07", "2026-11-08", "2026-11-09"]
+    assert out["week_start"] == "2026-11-07"
+
+
+def test_api_start_today(api):
+    c, _ = api
+    r = c.get("/api/hub?start=today", headers=HUB).json()
+    assert r["week_start"] == r["today"]
+
+
 def test_next_week_offset():
     out = hub.build(Sources(FakeTodoist()), cfg(), offset=1, now=NOW)
     assert out["week_start"] == "2026-11-09"
