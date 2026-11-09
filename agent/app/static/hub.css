@@ -46,6 +46,10 @@ button { font: inherit; cursor: pointer; }
 .navbtn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 999px; padding: 8px 14px; }
 .navbtn.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 
+.quote { margin: 6px 0 10px; font-size: 21px; line-height: 1.35; font-style: italic; color: var(--ink);
+         text-align: center; text-wrap: balance; }
+.quote .by { font-style: normal; font-size: 15px; color: var(--muted); white-space: nowrap; }
+body.today-mode .quote { font-size: 23px; margin: 2px 0 10px; }
 .legend { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
 .who { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); }
 .dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
@@ -148,6 +152,7 @@ body.today-mode .clock { display: block; }
 
 /* Phones: today first, one column. */
 @media (max-width: 760px) {
+  .quote { display: none; }   /* kitchen screen only */
   h1 { font-size: 22px; }
   .clock { display: none; }
   .week { display: block; }

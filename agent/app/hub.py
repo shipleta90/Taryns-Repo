@@ -7,8 +7,12 @@ the calendar still shows and the Todoist sections say "unavailable".
 from __future__ import annotations
 
 import datetime as dt
+import json
 import logging
+import random
 import re
+from functools import lru_cache
+from pathlib import Path
 from dataclasses import dataclass, field
 from zoneinfo import ZoneInfo
 
@@ -90,6 +94,41 @@ def kind_of(title: str, people: list[str], all_day: bool, days: int) -> str:
                                   or _TRAVEL_DASH.search(title) or (all_day and days > 1)):
         return "travel"
     return "event"
+
+
+# --- quote of the day ---------------------------------------------------------------------
+# A fixed, family-approved list (app/data/quotes.json). Quotes come in sets ("buddhist",
+# "brene") and the days alternate between them: one day a Buddhist teacher, the next Brené
+# Brown. Each set is shuffled once with a fixed seed, so every quote in a set shows once before
+# any repeats. Same quote all day, on every screen.
+_QUOTES_FILE = Path(__file__).parent / "data" / "quotes.json"
+
+
+@lru_cache(maxsize=1)
+def _quote_sets() -> list[list[dict]]:
+    try:
+        items = json.loads(_QUOTES_FILE.read_text())
+    except Exception as exc:
+        log.warning("quotes unavailable: %s", exc)
+        return []
+    sets: dict[str, list[dict]] = {}
+    for q in items:
+        if q.get("text"):
+            sets.setdefault(q.get("set") or "all", []).append({"text": q["text"], "by": q.get("by", "")})
+    out = []
+    for name, qs in sets.items():          # file order: the first set shows on even days
+        random.Random(f"20261109-{name}").shuffle(qs)
+        out.append(qs)
+    return out
+
+
+def quote_of_the_day(day: dt.date) -> dict | None:
+    sets = _quote_sets()
+    if not sets:
+        return None
+    n = day.toordinal()
+    qs = sets[n % len(sets)]
+    return qs[(n // len(sets)) % len(qs)]
 
 
 # --- privacy on a shared kitchen screen ----------------------------------------------------
@@ -383,6 +422,7 @@ def build(sources, cfg: HubConfig, offset: int = 0, now: dt.datetime | None = No
         "week_start": start.isoformat(),
         "offset": max(0, min(int(offset), 1)),
         "people": PEOPLE + [FAMILY],
+        "quote": quote_of_the_day(today),
         "days": [{"date": (start + dt.timedelta(days=i)).isoformat(), "events": []} for i in range(7)],
         "banner": {"travel": [], "appointments_today": []},
         "untagged": [],
