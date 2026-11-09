@@ -193,36 +193,34 @@ function dinnerText(m) {
 }
 
 function renderToday() {
-  const days = data.days.slice(0, 3);
   const strip = [];
   const tonight = (data.dinners[data.today] || []).map(dinnerText).join(" / ");
   strip.push(`<div class="flag dinner">🍽️ Tonight: ${esc(tonight || "not planned")}</div>`);
   if (data.sunbasket?.status && data.sunbasket.status !== "unknown") strip.push(`<div class="flag">${esc(data.sunbasket.text)}</div>`);
   const seen = new Set();
   for (const t of data.banner.travel) {
-    if (seen.has(t.title)) continue;
+    if (seen.has(t.title) || t.start > data.today || t.end < data.today) continue;   // happening today only
     seen.add(t.title);
     strip.push(`<div class="flag" style="border-left-color:${esc(color(t.people[0]))}">${t.kind === "flight" ? "✈️" : "🧳"} ${esc(t.title)}</div>`);
   }
   $("tvStrip").innerHTML = strip.join("");
 
-  const MAX = 6;
-  $("tvDays").innerHTML = days.map((d, i) => {
-    const name = i === 0 ? "Today" : i === 1 ? "Tomorrow" : dayLabel(d.date, { weekday: "long" });
-    // Multi-day trips are already in the strip above, so they don't repeat in every column.
-    const list = d.events.filter((e) => !(e.kind === "travel" && e.days > 1));
-    const evs = list.slice(0, MAX).map(evHtml).join("") || '<div class="empty">Nothing planned</div>';
-    const more = list.length > MAX ? `<div class="tv-more">+${list.length - MAX} more · tap Full week</div>` : "";
-    return `<div class="tv-day ${i === 0 ? "is-today" : ""}"><h3>${esc(name)} <span>${esc(dayLabel(d.date, { month: "short", day: "numeric" }))}</span></h3>${evs}${more}</div>`;
-  }).join("");
+  // Just today, in big type. Events flow into two columns on a wide screen.
+  const MAX = 10;
+  const d = data.days[0];
+  const list = d.events.filter((e) => !(e.kind === "travel" && e.days > 1));   // trips are in the strip
+  const evs = list.slice(0, MAX).map(evHtml).join("") || '<div class="empty">Nothing on the calendar today</div>';
+  const more = list.length > MAX ? `<div class="tv-more">+${list.length - MAX} more · tap Full week</div>` : "";
+  $("tvDays").innerHTML = `<div class="tv-day is-today"><h3>Today <span>${esc(dayLabel(d.date, { weekday: "long", month: "long", day: "numeric" }))}</span></h3>
+    <div class="tv-evs">${evs}</div>${more}</div>`;
 
   if (data.errors.todoist) {
     $("tvTasks").innerHTML = `<div class="empty">${esc(data.errors.todoist)}</div>`;
     $("tvGroceryCount").textContent = "";
     return;
   }
-  // Tasks due by tomorrow (or undated), up to 3 per person; people with nothing are left out.
-  const soon = days[1].date;
+  // Tasks due today (or undated, or missed), up to 3 per person; people with nothing are left out.
+  const soon = data.today;
   // Kids and Cece first: they use the kitchen screen most.
   const order = ["brooks", "elliott", "pierce", "cece", "gypsy", "family", "taryn", "phillip"];
   const people = order.map((k) => data.people.find((p) => p.key === k)).filter(Boolean);

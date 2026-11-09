@@ -136,8 +136,8 @@ everyone's tasks (Taryn, Phillip, Brooks, Elliott, Cece, Gypsy).
   hub goes straight into Todoist.
 - **Private on a shared screen:** dollar amounts are hidden; events containing a word in `HUB_HIDE` show as "Private";
   calendars in `HUB_SKIP_CALENDARS` never show.
-- **Small screens (iPad mini):** tap **Today** for a big-type view of today, tomorrow and the next day, tonight's
-  dinner, trips, everyone's tasks due by tomorrow (kids and Cece first) and a grocery box. Add it to the Home Screen while
+- **Small screens (iPad mini):** tap **Today** for a big-type view of just today, tonight's
+  dinner, trips, everyone's tasks due today (kids and Cece first) and a grocery box. Add it to the Home Screen while
   Today is showing and that screen opens in Today; **Full week** switches back for 3 minutes.
 - **Its own key.** The hub uses `HUB_TOKEN`, which opens the hub and nothing else (not Bruce, the budget or the inbox).
   Open `/hub#t=<HUB_TOKEN>` on each device (scan it as a QR code; never type it). The key stays in the link so
