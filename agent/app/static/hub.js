@@ -235,8 +235,14 @@ function renderToday() {
   $("tvGroceryCount").textContent = n ? `${n} item${n > 1 ? "s" : ""} on the list` : "List is empty";
 }
 
+function renderQuote() {
+  const q = data.quote;
+  $("quote").hidden = !q;
+  if (q) $("quote").innerHTML = `“${esc(q.text)}”${q.by ? ` <span class="by">— ${esc(q.by)}</span>` : ""}`;
+}
+
 function render() {
-  renderLegend(); renderStatus();
+  renderLegend(); renderStatus(); renderQuote();
   if (view === "today") { renderToday(); return; }
   renderBanner(); renderWeek(); renderDinners(); renderHomework(); renderGroceries(); renderTasks();
 }
