@@ -123,12 +123,14 @@ body.today-mode .clock { font-size: 38px; }
 .tv-strip { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .tv-strip .flag { font-size: 20px; padding: 8px 14px; }
 .tv-strip .flag.dinner { border-left-color: #d97706; font-weight: 600; }
-.tv-days { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
+.tv-days { margin-bottom: 10px; }
+.tv-evs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 10px; }
+@media (orientation: portrait) { .tv-evs { grid-template-columns: 1fr; } }
 .tv-day { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; }
 .tv-day.is-today { background: var(--today); }
-.tv-day h3 { margin: 0 0 8px; font-size: 22px; display: flex; justify-content: space-between; gap: 6px; }
+.tv-day h3 { margin: 0 0 8px; font-size: 24px; display: flex; justify-content: space-between; gap: 6px; }
 .tv-day h3 span { color: var(--muted); font-weight: 500; font-size: 16px; }
-.tv-day .ev { font-size: 19px; padding: 7px 9px; margin-bottom: 6px; border-left-width: 7px; }
+.tv-day .ev { font-size: 21px; padding: 7px 9px; margin-bottom: 6px; border-left-width: 7px; }
 .tv-day .ev .t { font-size: 15px; }
 .tv-more { color: var(--muted); font-size: 15px; padding-left: 4px; }
 .tv-bottom { display: grid; grid-template-columns: 1fr 260px; gap: 10px; }

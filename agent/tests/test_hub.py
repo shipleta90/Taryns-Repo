@@ -279,13 +279,28 @@ def test_build_homework():
 
 def test_build_todoist():
     out = hub.build(Sources(FakeTodoist()), cfg(), now=NOW)
-    assert [t["content"] for t in out["tasks"]["brooks"]] == ["Sign permission slip"]
+    assert out["tasks"]["brooks"] == []                      # due tomorrow: kids see today only
     assert out["tasks"]["elliott"][0]["overdue"] is True
     assert [t["content"] for t in out["tasks"]["family"]] == ["Renew passports"]
     assert out["tasks"]["taryn"] == []                       # due after this week: hidden
     assert [t["content"] for t in out["tasks"]["cece"]] == ["Pierce's diapers"]
     assert [g["section"] for g in out["groceries"]] == ["Dairy & Eggs", "Pantry", "Other"]
     assert out["dinners"]["2026-11-04"][0]["sunbasket"] is True and "2026-10-28" not in out["dinners"]
+
+
+def test_kids_see_only_todays_tasks():
+    todo = FakeTodoist()
+    todo.data["p-fam"] = [
+        {"id": "k1", "content": "Make bed", "labels": ["Brooks"], "due": {"date": "2026-11-05"}},       # today
+        {"id": "k2", "content": "Take out trash", "labels": ["Brooks"], "due": {"date": "2026-11-06"}},  # tomorrow
+        {"id": "k3", "content": "Read 20 min", "labels": ["Elliott"], "due": {"date": "2026-11-04"}},   # missed
+        {"id": "k4", "content": "Science kit", "labels": ["Elliott"], "due": None},                     # no date
+        {"id": "p1", "content": "Call plumber", "labels": ["Phillip"], "due": {"date": "2026-11-07"}},  # adults: whole week
+    ]
+    out = hub.build(Sources(todo), cfg(), now=NOW)
+    assert [t["content"] for t in out["tasks"]["brooks"]] == ["Make bed"]
+    assert [(t["content"], t["overdue"]) for t in out["tasks"]["elliott"]] == [("Read 20 min", True), ("Science kit", False)]
+    assert [t["content"] for t in out["tasks"]["phillip"]] == ["Call plumber"]
 
 
 def test_each_source_fails_on_its_own():
