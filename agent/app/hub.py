@@ -97,27 +97,38 @@ def kind_of(title: str, people: list[str], all_day: bool, days: int) -> str:
 
 
 # --- quote of the day ---------------------------------------------------------------------
-# A fixed, family-approved list (app/data/quotes.json): calm, non-religious, kid-friendly.
-# The order is shuffled once with a fixed seed, so similar quotes aren't back to back and
-# every quote is shown once before any repeats. Same quote all day, on every screen.
+# A fixed, family-approved list (app/data/quotes.json). Quotes come in sets ("buddhist",
+# "brene") and the days alternate between them: one day a Buddhist teacher, the next Brené
+# Brown. Each set is shuffled once with a fixed seed, so every quote in a set shows once before
+# any repeats. Same quote all day, on every screen.
 _QUOTES_FILE = Path(__file__).parent / "data" / "quotes.json"
 
 
 @lru_cache(maxsize=1)
-def _quote_order() -> list[dict]:
+def _quote_sets() -> list[list[dict]]:
     try:
         items = json.loads(_QUOTES_FILE.read_text())
     except Exception as exc:
         log.warning("quotes unavailable: %s", exc)
         return []
-    items = [q for q in items if q.get("text")]
-    random.Random(20261109).shuffle(items)
-    return items
+    sets: dict[str, list[dict]] = {}
+    for q in items:
+        if q.get("text"):
+            sets.setdefault(q.get("set") or "all", []).append({"text": q["text"], "by": q.get("by", "")})
+    out = []
+    for name, qs in sets.items():          # file order: the first set shows on even days
+        random.Random(f"20261109-{name}").shuffle(qs)
+        out.append(qs)
+    return out
 
 
 def quote_of_the_day(day: dt.date) -> dict | None:
-    items = _quote_order()
-    return items[day.toordinal() % len(items)] if items else None
+    sets = _quote_sets()
+    if not sets:
+        return None
+    n = day.toordinal()
+    qs = sets[n % len(sets)]
+    return qs[(n // len(sets)) % len(qs)]
 
 
 # --- privacy on a shared kitchen screen ----------------------------------------------------

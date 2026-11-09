@@ -458,17 +458,24 @@ def test_calendar_check_note(tmp_path):
 
 
 def test_quote_of_the_day():
-    q = hub.quote_of_the_day(dt.date(2026, 11, 9))
-    assert q["text"] and q == hub.quote_of_the_day(dt.date(2026, 11, 9))          # same all day
-    n = len(hub._quote_order())
-    days = [hub.quote_of_the_day(dt.date(2026, 1, 1) + dt.timedelta(days=i))["text"] for i in range(n)]
-    assert len(set(days)) == n                                                       # no repeats in a cycle
+    day = dt.date(2026, 11, 9)
+    q = hub.quote_of_the_day(day)
+    assert q["text"] and q == hub.quote_of_the_day(day)                                # same all day
+    # alternates: Buddhist teacher one day, Brené Brown the next
+    bys = [hub.quote_of_the_day(day + dt.timedelta(days=i))["by"] for i in range(6)]
+    brene = [b == "Brené Brown" for b in bys]
+    assert brene in ([False, True] * 3, [True, False] * 3)
+    # each set shows every quote once before repeating
+    for k, qs in enumerate(hub._quote_sets()):
+        start = dt.date.fromordinal(((day.toordinal() // 2) * 2) + k)
+        seen = [hub.quote_of_the_day(start + dt.timedelta(days=2 * i))["text"] for i in range(len(qs))]
+        assert len(set(seen)) == len(qs)
     assert hub.build(Sources(FakeTodoist()), cfg(), now=NOW)["quote"]["text"]
 
 
 def test_quotes_are_clean():
     import json as _json
     items = _json.loads(hub._QUOTES_FILE.read_text())
-    assert len(items) >= 150
+    assert {q["set"] for q in items} == {"buddhist", "brene"}
     for q in items:
-        assert set(q) == {"text", "by"} and 5 < len(q["text"]) <= 160, q
+        assert set(q) == {"text", "by", "set"} and q["by"] and 5 < len(q["text"]) <= 160, q
