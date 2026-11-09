@@ -127,7 +127,6 @@ function renderWeek() {
 }
 
 function renderDinners() {
-  const sbComing = data.sunbasket?.status === "coming";
   $("dinners").innerHTML = data.days.map((d) => {
     const meals = data.dinners[d.date] || [];
     const txt = meals.length
@@ -136,7 +135,7 @@ function renderDinners() {
         : esc(m.content)).join(" / ")
       : '<span class="empty">—</span>';
     return `<li class="${d.date === data.today ? "is-today" : ""}"><span class="d">${esc(dayLabel(d.date, { weekday: "short" }))}</span><span>${txt}</span></li>`;
-  }).join("") + (sbComing ? '<li><span class="d"></span><span class="empty">Sunbasket covers 2 dinners this week</span></li>' : "");
+  }).join("") + ("");
 }
 
 function renderHomework() {
