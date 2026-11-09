@@ -29,6 +29,7 @@ PEOPLE = [
 FAMILY = {"key": "family", "name": "Family", "color": "#6b7280", "role": "family"}
 BY_KEY = {p["key"]: p for p in PEOPLE}
 PARENTS = {"taryn", "phillip"}
+KIDS = {"brooks", "elliott", "pierce"}   # their task columns show today only
 
 # Group words that mean several people. Extra ones come from HUB_ALIASES in .env.
 DEFAULT_ALIASES = {"boys": ["brooks", "elliott"], "kids": ["brooks", "elliott", "pierce"],
@@ -336,6 +337,8 @@ def _todoist(todoist, cfg: HubConfig, start: dt.date, today: dt.date) -> dict:
             if due and due > end:
                 continue        # later than this week: not shown yet
             who = _person_for_task(t, "cece" if proj_key == "cece" else "family")
+            if who in KIDS and due and due > today.isoformat():
+                continue        # kids see only today's tasks (plus missed ones, so repeats keep coming)
             tasks[who].append({"id": t["id"], "content": t.get("content", "")[:200], "due": due,
                                "overdue": bool(due and due < today.isoformat())})
     for lst in tasks.values():
