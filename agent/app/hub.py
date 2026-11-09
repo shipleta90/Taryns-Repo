@@ -145,7 +145,8 @@ def kitchen_title(title: str, hide_words: list[str]) -> str:
 
 
 # --- Sunbasket -----------------------------------------------------------------------------
-SUNBASKET_QUERY = "from:sunbasket.com newer_than:14d"
+# Phillip forwards Sunbasket's emails, so they arrive from him: match the subject too.
+SUNBASKET_QUERY = "(from:sunbasket.com OR subject:sunbasket) newer_than:14d"
 _SB_SKIP = re.compile(r"(?i)\bskip(ped)?\b")
 _SB_COMING = re.compile(r"(?i)(shipped|on its way|out for delivery|arriv|delivered|order (is )?confirmed|"
                         r"order confirmation|your (box|order|delivery)|get ready|is coming)")
@@ -158,7 +159,9 @@ def sunbasket_status(emails: list[dict]) -> dict:
         if _SB_SKIP.search(text):
             return {"status": "skipped", "text": "No Sunbasket this week", "email_id": m.get("id")}
         if _SB_COMING.search(text):
-            return {"status": "coming", "text": "📦 Sunbasket arriving Monday (2 dinners)", "email_id": m.get("id")}
+            done = re.search(r"(?i)\bdelivered\b", text)
+            return {"status": "coming", "text": "📦 Sunbasket delivered" if done else "📦 Sunbasket on its way",
+                    "email_id": m.get("id")}
     return {"status": "unknown", "text": "Sunbasket: no info (no recent Sunbasket email)", "email_id": None}
 
 
