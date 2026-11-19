@@ -273,8 +273,44 @@ def running_hot(txns: list[dict], today: dt.date) -> list[dict]:
         projected = spent * pace
         if avg > 0 and projected > 1.15 * avg and projected - avg >= 50:
             out.append({"category": cat, "spent": spent, "projected": round(projected, 2),
-                        "usual": round(avg, 2), "over_by": round(projected - avg, 2)})
+                        "usual": round(avg, 2), "over_by": round(projected - avg, 2),
+                        **_hot_drivers(txns, cat, month, _prev_months(month, 3), today.day / days_in_month)})
     return sorted(out, key=lambda r: r["over_by"], reverse=True)
+
+
+def _hot_drivers(txns: list[dict], category: str, month: str, history_months: list[str],
+                 month_fraction: float) -> dict:
+    """What is pushing a category up: the merchants where this month so far is furthest above
+    their usual pace (new ones included), and the single biggest charge."""
+    def per_merchant(m: str) -> dict[str, tuple[float, int]]:
+        out: dict[str, tuple[float, int]] = {}
+        for t in txns:
+            if t["category"] == category and month_key(t["posted"]) == m:
+                total, n = out.get(t["merchant"], (0.0, 0))
+                out[t["merchant"]] = (total - t["amount"], n + (1 if t["amount"] < 0 else 0))
+        return out
+
+    now = per_merchant(month)
+    past = [per_merchant(m) for m in history_months]
+    past = [p for p in past if p] or [{}]
+    drivers = []
+    for merchant, (spent, count) in now.items():
+        usual = sum(p.get(merchant, (0.0, 0))[0] for p in past) / len(past)
+        usual_count = sum(p.get(merchant, (0.0, 0))[1] for p in past) / len(past)
+        extra = spent - usual * min(month_fraction, 1.0)     # above where it usually is by today
+        # A once-a-month charge that already came through is normal, not a driver: it must be new,
+        # already past a whole usual month, or clearly more frequent than usual.
+        unusual = usual == 0 or spent > usual * 1.1 or count >= usual_count + 2
+        if extra >= 10 and unusual:
+            drivers.append({"merchant": merchant, "spent": round(spent, 2), "count": count,
+                            "usual": round(usual, 2), "usual_count": round(usual_count, 1),
+                            "new": usual == 0, "extra": round(extra, 2)})
+    drivers.sort(key=lambda d: d["extra"], reverse=True)
+    charges = [t for t in txns if t["category"] == category and month_key(t["posted"]) == month and t["amount"] < 0]
+    big = min(charges, key=lambda t: t["amount"], default=None)
+    largest = ({"merchant": big["merchant"], "amount": round(-big["amount"], 2),
+                "date": dt.date.fromtimestamp(big["posted"]).isoformat()} if big else None)
+    return {"drivers": drivers[:3], "largest": largest}
 
 
 # --- the down-payment goal -----------------------------------------------------------------

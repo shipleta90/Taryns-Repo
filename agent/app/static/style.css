@@ -99,6 +99,8 @@ details.more summary { font-size: 13px; text-transform: uppercase; letter-spacin
 .acct-row .subject { min-width: 0; }
 .subs-sum .verdict { margin-top: 8px; }
 .sub-cancel .subject { text-decoration: line-through; color: var(--muted); }
+.drivers { margin: 2px 0 6px; padding-left: 18px; font-size: 13px; }
+.list .drivers li { display: list-item; margin: 2px 0; padding: 0; border: 0; }
 .warn-text { color: var(--warn); }
 .acct-btns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 .cat-row { cursor: pointer; }
