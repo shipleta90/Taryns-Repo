@@ -137,6 +137,14 @@ def test_sunbasket(subject, status):
     assert hub.sunbasket_status([{"id": "s1", "subject": subject, "snippet": ""}])["status"] == status
 
 
+def test_sunbasket_forwarded_by_phillip():
+    assert "subject:sunbasket" in hub.SUNBASKET_QUERY
+    fwd = [{"id": "f", "subject": "Fwd: Your Sunbasket Is On Its Way 🚛", "snippet": "Forwarded message"}]
+    assert hub.sunbasket_status(fwd)["text"] == "📦 Sunbasket on its way"
+    done = [{"id": "d", "subject": "Fwd: Your Sunbasket Has Been Delivered🌞", "snippet": ""}]
+    assert hub.sunbasket_status(done)["text"] == "📦 Sunbasket delivered"
+
+
 def test_sunbasket_newest_email_wins():
     emails = [{"id": "new", "subject": "You skipped next week", "snippet": ""},
               {"id": "old", "subject": "Your order is confirmed", "snippet": ""}]
