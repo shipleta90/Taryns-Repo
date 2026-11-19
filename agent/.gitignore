@@ -2,6 +2,6 @@
 __pycache__/
 *.pyc
 .env
-data/
+/data/
 credentials.json
 token.json
