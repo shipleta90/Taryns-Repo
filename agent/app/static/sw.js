@@ -1,5 +1,5 @@
 // Caches the app shell only. API responses and the family hub are never cached by the service worker.
-const SHELL = "agent-shell-v8";
+const SHELL = "agent-shell-v9";
 const FILES = ["/", "/static/manifest.webmanifest"];
 
 self.addEventListener("install", (e) => e.waitUntil(caches.open(SHELL).then((c) => c.addAll(FILES))));

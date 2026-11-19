@@ -104,9 +104,7 @@ def summary(db: Database, today: dt.date | None = None) -> dict:
     goal = budget.goal_status(settings, house_balance, house_net if house else None, today, condo)
 
     months_left = goal["months_left"] if goal else 0
-    recurring = [{"merchant": r.merchant, "category": r.category, "monthly": r.monthly, "yearly": r.yearly,
-                  "last_charged": r.last_charged, "adds_by_target": round(r.monthly * months_left, 2)}
-                 for r in budget.find_recurring(txns, today)]
+    subscriptions = subscriptions_review(db, today, months_left)
 
     month = today.strftime("%Y-%m")
     spent = budget.spending_by_category(txns, month)
@@ -133,10 +131,59 @@ def summary(db: Database, today: dt.date | None = None) -> dict:
         "accounts": [{k: a[k] for k in ("id", "org", "name", "balance", "source", "is_house", "hidden",
                                         "is_condo_loan")}
                      for a in accounts],
-        "cuts": {"recurring": recurring, "running_hot": budget.running_hot(txns, today)},
+        "subscriptions": subscriptions,
+        "cuts": {"running_hot": budget.running_hot(txns, today)},
         "month": month, "categories": categories, "average_months": avg_months, "category_names": budget.SPEND_CATEGORIES,
         "uncategorized": uncategorized[:50],
     }
+
+
+SUB_STATUSES = ("keep", "cancel", "unsure")
+
+
+def subscriptions_review(db: Database, today: dt.date, months_left: int = 0) -> dict:
+    """Every active subscription or repeating bill, with your Keep / Cancel / Not sure marks.
+    Looks back 13 months so yearly plans are caught once there is enough history."""
+    since = (dt.datetime.combine(today, dt.time.min) - dt.timedelta(days=400)).timestamp()
+    txns = db.fin_txns(since)
+    subs = budget.find_subscriptions(txns, today)
+    marks = db.fin_settings().get("_subs", {})
+    items = []
+    for s in subs:
+        mark = marks.get(s.merchant) or {}
+        status = mark.get("status")
+        items.append({
+            "merchant": s.merchant, "category": s.category, "cadence": s.cadence, "amount": s.amount,
+            "monthly": s.monthly, "yearly": s.yearly, "last_charged": s.last_charged,
+            "next_expected": s.next_expected, "previous_amount": s.previous_amount, "group": s.group,
+            "status": status,
+            # you marked it cancelled, but a charge came through after that
+            "still_charging": status == "cancel" and s.last_charged > mark.get("at", ""),
+            "adds_by_target": round(s.monthly * months_left, 2),
+        })
+    cancel = [i for i in items if i["status"] == "cancel"]
+    return {
+        "items": items,
+        "monthly_total": round(sum(i["monthly"] for i in items), 2),
+        "yearly_total": round(sum(i["yearly"] for i in items), 2),
+        "cancel_yearly": round(sum(i["yearly"] for i in cancel), 2),
+        "cancel_by_target": round(sum(i["adds_by_target"] for i in cancel), 2),
+        "to_review": sum(1 for i in items if not i["status"] or i["status"] == "unsure"),
+        "overlaps": budget.overlaps(subs),
+        "once": budget.single_subscription_charges(txns, today, {s.merchant for s in subs}),
+    }
+
+
+def mark_subscription(db: Database, merchant: str, status: str | None, today: dt.date | None = None) -> None:
+    """status: keep | cancel | unsure, or None to clear the mark."""
+    if status is not None and status not in SUB_STATUSES:
+        raise ValueError("status must be keep, cancel or unsure")
+    marks = dict(db.fin_settings().get("_subs", {}))
+    if status is None:
+        marks.pop(merchant, None)
+    else:
+        marks[merchant] = {"status": status, "at": (today or dt.date.today()).isoformat()}
+    db.set_fin_settings({"_subs": marks})
 
 
 def transactions(db: Database, month: str, category: str | None = None) -> list[dict]:

@@ -86,46 +86,134 @@ def rule_category(merchant: str, amount: float) -> str | None:
     return None
 
 
-# --- recurring charges ---------------------------------------------------------------------
+# --- subscriptions and other repeating charges -------------------------------------------
+# Categories whose repeat charges are everyday spending, not subscriptions or bills you could cancel.
+NOT_SUBSCRIPTIONS = {"Groceries", "Dining", "Transport", "Travel", "Housing", "Shopping",
+                     "Gifts & donations"} | set(NON_SPEND)
+
+# cadence: (gap range in days, charges per year, days without a charge before it counts as stopped)
+CADENCES = {
+    "weekly": ((5, 9), 52, 21),
+    "monthly": ((24, 37), 12, 45),
+    "quarterly": ((80, 100), 4, 120),
+    "yearly": ((350, 380), 1, 400),
+}
+
+# Services that do the same job; paying for several is an easy place to cut.
+OVERLAP_GROUPS: list[tuple[str, tuple[str, ...]]] = [
+    ("streaming services", ("NETFLIX", "HULU", "DISNEY", "HBO", "MAX.COM", "PARAMOUNT", "PEACOCK", "PRIME VIDEO",
+                            "APPLE TV", "YOUTUBE TV", "STARZ", "ESPN")),
+    ("music services", ("SPOTIFY", "APPLE MUSIC", "YOUTUBE MUSIC", "PANDORA", "SIRIUSXM", "TIDAL")),
+    ("cloud storage plans", ("ICLOUD", "GOOGLE ONE", "GOOGLE STORAGE", "DROPBOX", "MICROSOFT 365")),
+    ("AI tools", ("OPENAI", "CHATGPT", "ANTHROPIC", "CLAUDE.AI", "PERPLEXITY", "MIDJOURNEY")),
+    ("news subscriptions", ("NYTIMES", "NEW YORK TIMES", "WSJ", "WASHINGTON POST", "SUBSTACK", "ATLANTIC")),
+    ("fitness memberships", ("PELOTON", "CLASSPASS", "EQUINOX", "GYM", "FITNESS", "YOGA", "STRAVA")),
+]
+
+
 @dataclass
-class Recurring:
+class Subscription:
     merchant: str
     category: str
-    monthly: float          # typical monthly cost (positive number)
+    cadence: str            # weekly | monthly | quarterly | yearly
+    amount: float           # typical charge (positive)
+    monthly: float          # cost per month, whatever the cadence
     last_charged: str       # YYYY-MM-DD
+    next_expected: str      # YYYY-MM-DD
     count: int
+    previous_amount: float | None = None   # set when the latest charge went up
 
     @property
     def yearly(self) -> float:
         return round(self.monthly * 12, 2)
 
-
-# Recurring charges you could cancel or renegotiate. Groceries, dining, gas and shopping repeat too,
-# but they aren't subscriptions; those show up under "running hot" instead.
-CANCELLABLE = {"Subscriptions", "Personal care", "Entertainment", "Utilities", "Insurance", "Fees", "Kids",
-               "Other", "Uncategorized"}
+    @property
+    def group(self) -> str | None:
+        return overlap_group(self.merchant)
 
 
-def find_recurring(txns: list[dict], today: dt.date) -> list[Recurring]:
-    """Cancellable charges from the same merchant roughly every month at a similar amount (within 20%)."""
+def overlap_group(merchant: str) -> str | None:
+    for name, keys in OVERLAP_GROUPS:
+        if any(_matches(k, merchant) for k in keys):
+            return name
+    return None
+
+
+def _cadence(gaps: list[int]) -> str | None:
+    """The cadence most gaps fit, if at least half of them do."""
+    for name, ((lo, hi), _, _) in CADENCES.items():
+        fits = [g for g in gaps if lo <= g <= hi]
+        if fits and len(fits) >= max(1, (len(gaps) + 1) // 2):
+            return name
+    return None
+
+
+def _next_charge(last: dt.date, cadence: str) -> dt.date:
+    """Same day next week / month / quarter / year (clamped to the month's length)."""
+    if cadence == "weekly":
+        return last + dt.timedelta(days=7)
+    months = {"monthly": 1, "quarterly": 3, "yearly": 12}[cadence]
+    y, m = divmod(last.month - 1 + months, 12)
+    year, month = last.year + y, m + 1
+    days_in_month = (dt.date(year + month // 12, month % 12 + 1, 1) - dt.timedelta(days=1)).day
+    return dt.date(year, month, min(last.day, days_in_month))
+
+
+def find_subscriptions(txns: list[dict], today: dt.date) -> list[Subscription]:
+    """Charges from the same merchant at a steady cadence and a similar amount (within 25%) that are
+    still active, in any category except everyday spending. Most expensive first."""
     by_merchant: dict[str, list[dict]] = {}
     for t in txns:
-        if t["amount"] < 0 and t["category"] in CANCELLABLE:
+        if t["amount"] < 0 and t["category"] not in NOT_SUBSCRIPTIONS:
             by_merchant.setdefault(t["merchant"], []).append(t)
     out = []
     for merchant, ts in by_merchant.items():
+        if len(ts) < 2:
+            continue
         ts = sorted(ts, key=lambda t: t["posted"])
         dates = [dt.date.fromtimestamp(t["posted"]) for t in ts]
-        if len(ts) < 2 or (today - dates[-1]).days > 45:
-            continue  # need repeats, and it must still be active
-        gaps = [(b - a).days for a, b in zip(dates, dates[1:])]
+        cadence = _cadence([(b - a).days for a, b in zip(dates, dates[1:])])
+        if not cadence:
+            continue
+        (lo, hi), per_year, stale_after = CADENCES[cadence]
+        if (today - dates[-1]).days > stale_after:
+            continue  # stopped
         amounts = [-t["amount"] for t in ts]
         med = statistics.median(amounts)
-        monthly_gaps = [g for g in gaps if 24 <= g <= 37]
-        if len(monthly_gaps) < max(1, len(gaps) // 2) or any(abs(a - med) > 0.2 * med for a in amounts[-3:]):
-            continue
-        out.append(Recurring(merchant, ts[-1]["category"], round(med, 2), dates[-1].isoformat(), len(ts)))
+        if any(abs(a - med) > 0.25 * med for a in amounts[-3:]):
+            continue  # amounts jump around: everyday spending, not a plan
+        typical = amounts[-1]
+        prev = amounts[-2]
+        went_up = typical > prev + 0.5 and typical > prev * 1.03
+        out.append(Subscription(
+            merchant, ts[-1]["category"], cadence, round(typical, 2), round(typical * per_year / 12, 2),
+            dates[-1].isoformat(), _next_charge(dates[-1], cadence).isoformat(),
+            len(ts), round(prev, 2) if went_up else None))
     return sorted(out, key=lambda r: r.monthly, reverse=True)
+
+
+def single_subscription_charges(txns: list[dict], today: dt.date, known: set[str]) -> list[dict]:
+    """Merchants filed under Subscriptions that charged only once in the last year: likely a yearly
+    plan or a new sign-up, so worth a look even though there is no pattern yet."""
+    year_ago = (dt.datetime.combine(today, dt.time.min) - dt.timedelta(days=365)).timestamp()
+    by_merchant: dict[str, list[dict]] = {}
+    for t in txns:
+        if t["amount"] < 0 and t["category"] == "Subscriptions" and t["merchant"] not in known \
+                and t["posted"] >= year_ago:
+            by_merchant.setdefault(t["merchant"], []).append(t)
+    out = [{"merchant": m, "amount": round(-ts[0]["amount"], 2),
+            "charged": dt.date.fromtimestamp(ts[0]["posted"]).isoformat()}
+           for m, ts in by_merchant.items() if len(ts) == 1]
+    return sorted(out, key=lambda r: r["amount"], reverse=True)
+
+
+def overlaps(subs: list[Subscription]) -> list[dict]:
+    groups: dict[str, list[Subscription]] = {}
+    for s in subs:
+        if s.group:
+            groups.setdefault(s.group, []).append(s)
+    return [{"group": g, "merchants": [s.merchant for s in ss], "yearly": round(sum(s.yearly for s in ss), 2)}
+            for g, ss in groups.items() if len(ss) > 1]
 
 
 # --- monthly spending ----------------------------------------------------------------------

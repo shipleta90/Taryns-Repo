@@ -46,15 +46,38 @@ def test_same_merchant_normalizes_the_same_across_stores():
 
 
 # ---- recurring / running hot -------------------------------------------------------------
-def test_find_recurring_monthly_and_ignores_one_offs_and_stale():
-    txns = [tx("NETFLIX.COM", -15.49, 2026, m, 3, "Subscriptions") for m in (7, 8, 9, 10)]
-    txns += [tx("GYM", -80, 2026, m, 15, "Personal care") for m in (4, 5, 6)]       # stopped in June
+def test_find_subscriptions_any_cadence_and_category():
+    txns = [tx("NETFLIX.COM", -15.49, 2026, m, 3, "Subscriptions") for m in (7, 8, 9)]
+    txns += [tx("NETFLIX.COM", -17.99, 2026, 10, 3, "Subscriptions")]                  # price went up
+    txns += [tx("CORE GYM", -80, 2026, m, 15, "Health") for m in (7, 8, 9, 10)]        # not filed as a subscription
+    txns += [tx("ICLOUD", -2.99, 2025, 10, 12, "Subscriptions"), tx("ICLOUD", -2.99, 2026, 10, 12, "Subscriptions")]
+    txns += [tx("TUTOR", -40, 2026, 9, d, "Kids") for d in (22, 29)] + [tx("TUTOR", -40, 2026, 10, d, "Kids") for d in (6, 13)]
+    txns += [tx("OLD GYM", -60, 2026, m, 15, "Personal care") for m in (4, 5, 6)]      # stopped in June
     txns += [tx("IKEA", -300, 2026, 9, 1, "Shopping")]
     txns += [tx("PAYMENT THANK YOU", -900, 2026, m, 5, "Transfer") for m in (8, 9, 10)]
-    txns += [tx("TRADER JOE S", -150, 2026, m, 6, "Groceries") for m in (7, 8, 9, 10)]   # not a "cut"
-    rec = budget.find_recurring(txns, TODAY)
-    assert [r.merchant for r in rec] == ["NETFLIX.COM"]
-    assert rec[0].monthly == 15.49 and rec[0].yearly == 185.88
+    txns += [tx("TRADER JOE S", -150, 2026, m, 6, "Groceries") for m in (7, 8, 9, 10)]  # everyday spending
+    txns += [tx("DOORDASH", -d, 2026, m, 9, "Other") for m, d in ((8, 20), (9, 85), (10, 40))]   # amounts jump
+    subs = {s.merchant: s for s in budget.find_subscriptions(txns, TODAY)}
+    assert set(subs) == {"NETFLIX.COM", "CORE GYM", "ICLOUD", "TUTOR"}
+    n = subs["NETFLIX.COM"]
+    assert n.cadence == "monthly" and n.amount == 17.99 and n.previous_amount == 15.49 and n.yearly == 215.88
+    assert n.next_expected == "2026-11-03" and n.group == "streaming services"
+    assert subs["ICLOUD"].cadence == "yearly" and subs["ICLOUD"].monthly == 0.25
+    assert subs["TUTOR"].cadence == "weekly" and subs["TUTOR"].monthly == round(40 * 52 / 12, 2)
+    assert subs["CORE GYM"].previous_amount is None
+    assert list(subs)[0] == "TUTOR"                                                     # most expensive first
+
+
+def test_overlaps_and_single_charges():
+    txns = [tx(m, -c, 2026, mo, 5, "Subscriptions") for m, c in (("NETFLIX.COM", 18), ("HULU", 8))
+            for mo in (8, 9, 10)]
+    txns += [tx("SPOTIFY USA", -12, 2026, mo, 5, "Subscriptions") for mo in (8, 9, 10)]
+    txns += [tx("CANVA", -120, 2026, 3, 1, "Subscriptions"), tx("CANVA", -0.0, 2026, 3, 1, "Shopping")]
+    subs = budget.find_subscriptions(txns, TODAY)
+    assert budget.overlaps(subs) == [{"group": "streaming services", "merchants": ["NETFLIX.COM", "HULU"],
+                                      "yearly": 312.0}]
+    once = budget.single_subscription_charges(txns, TODAY, {s.merchant for s in subs})
+    assert once == [{"merchant": "CANVA", "amount": 120.0, "charged": "2026-03-01"}]
 
 
 def test_running_hot_flags_category_over_its_usual_pace():
@@ -264,6 +287,38 @@ def test_budget_api(tmp_path):
         assert r.status_code == 400
         month = dt.date.today().strftime("%Y-%m")
         assert c.get(f"/api/budget/transactions?month={month}", headers=auth).status_code == 200
+        assert "items" in c.get("/api/budget", headers=auth).json()["subscriptions"]
+        r = c.post("/api/budget/subscription", json={"merchant": "NETFLIX.COM", "status": "maybe"}, headers=auth)
+        assert r.status_code == 400
+        assert c.post("/api/budget/subscription", json={"merchant": "NETFLIX.COM", "status": "cancel"},
+                      headers=auth).status_code == 200
+
+
+def test_subscription_marks_savings_and_still_charging(db):
+    db.upsert_fin_account({"id": "a", "org": "Amex", "name": "Gold", "balance": 0, "balance_date": 0}, "csv")
+    today = dt.date.today()
+    day = lambda back: (dt.datetime.combine(today, dt.time(12)) - dt.timedelta(days=back)).timestamp()
+    db.add_fin_txns([{"id": f"{m}{i}", "account_id": "a", "posted": day(back), "amount": -amt,
+                      "description": m, "merchant": m}
+                     for m, amt in (("NETFLIX.COM", 18.0), ("SPOTIFY USA", 12.0))
+                     for i, back in enumerate((65, 35, 5))])
+    db.set_merchant_category("NETFLIX.COM", "Subscriptions", "rule")
+    db.set_merchant_category("SPOTIFY USA", "Subscriptions", "rule")
+    r = budget_service.subscriptions_review(db, today, months_left=6)
+    assert r["monthly_total"] == 30.0 and r["yearly_total"] == 360.0 and r["to_review"] == 2
+
+    budget_service.mark_subscription(db, "SPOTIFY USA", "cancel", today - dt.timedelta(days=20))
+    budget_service.mark_subscription(db, "NETFLIX.COM", "keep", today)
+    r = budget_service.subscriptions_review(db, today, months_left=6)
+    by = {i["merchant"]: i for i in r["items"]}
+    assert r["cancel_yearly"] == 144.0 and r["cancel_by_target"] == 72.0 and r["to_review"] == 0
+    assert by["SPOTIFY USA"]["still_charging"] and not by["NETFLIX.COM"]["still_charging"]   # charged 5 days ago
+
+    budget_service.mark_subscription(db, "SPOTIFY USA", None)
+    assert budget_service.subscriptions_review(db, today)["cancel_yearly"] == 0
+    with pytest.raises(ValueError):
+        budget_service.mark_subscription(db, "SPOTIFY USA", "maybe")
+    assert "_subs" not in budget_service.summary(db, today)["settings"]          # marks stay internal
 
 
 def test_running_hot_waits_for_enough_of_the_month():

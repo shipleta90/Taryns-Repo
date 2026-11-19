@@ -70,6 +70,11 @@ class MerchantRequest(BaseModel):
     category: str
 
 
+class SubscriptionMark(BaseModel):
+    merchant: str
+    status: str | None = None   # keep | cancel | unsure; None clears it
+
+
 class ImportRequest(BaseModel):
     account_name: str
     csv: str
@@ -417,6 +422,14 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
         if req.category not in budget_service.budget.CATEGORIES:
             raise HTTPException(status_code=400, detail="unknown category")
         db.set_merchant_category(req.merchant, req.category, "user")
+        return budget_service.summary(db)
+
+    @app.post("/api/budget/subscription", dependencies=[Depends(require_auth)])
+    def budget_subscription(req: SubscriptionMark):
+        try:
+            budget_service.mark_subscription(db, req.merchant[:200], req.status)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
         return budget_service.summary(db)
 
     @app.post("/api/budget/import", dependencies=[Depends(require_auth)])
