@@ -218,15 +218,12 @@ function renderBudget(d) {
   const og = $("opengoal");
   if (og) og.onclick = () => { $("goalsettings").open = true; $("gprice").focus(); };
 
-  const rec = d.cuts.recurring, hot = d.cuts.running_hot;
-  $("cuts-wrap").hidden = !rec.length && !hot.length;
-  $("cuts").innerHTML =
-    (rec.length ? `<p class="meta" style="margin:0 4px 8px">Subscriptions and bills that repeat every month.</p><ul class="list">${rec.map((r) => `<li>
-      <div class="cut-row"><span class="subject">${esc(r.merchant)}</span><span class="amt">${usd(r.monthly, true)}/mo</span></div>
-      <div class="meta">${esc(r.category)} · ${usd(r.yearly)}/yr · cancelling adds ${usd(r.adds_by_target)} by your date</div></li>`).join("")}</ul>` : "") +
-    (hot.length ? `<h2>Running hot this month</h2><ul class="list">${hot.map((h) => `<li>
+  renderSubs(d.subscriptions);
+  const hot = d.cuts.running_hot;
+  $("cuts-wrap").hidden = !hot.length;
+  $("cuts").innerHTML = `<ul class="list">${hot.map((h) => `<li>
       <div class="cut-row"><span class="subject">${esc(h.category)}</span><span class="amt">+${usd(h.over_by)}</span></div>
-      <div class="meta">On pace for ${usd(h.projected)} vs. usual ${usd(h.usual)}</div></li>`).join("")}</ul>` : "");
+      <div class="meta">On pace for ${usd(h.projected)} vs. usual ${usd(h.usual)}</div></li>`).join("")}</ul>`;
 
   $("month-title").textContent = "This month · " + new Date(d.month + "-15").toLocaleDateString([], { month: "long" });
   $("cats").setAttribute("aria-label", `Spending this month with ${d.average_months}-month averages`);
@@ -276,6 +273,34 @@ function renderBudget(d) {
   if (d.running) setTimeout(loadBudget, 4000);
 }
 
+const CADENCE = { weekly: "wk", monthly: "mo", quarterly: "qtr", yearly: "yr" };
+const shortDate = (iso) => new Date(iso + "T12:00").toLocaleDateString([], { month: "short", day: "numeric" });
+
+function renderSubs(s) {
+  $("subs-wrap").hidden = !s || (!s.items.length && !s.once.length);
+  if (!s) return;
+  const mark = (i, status, label) =>
+    `<button class="toggle secondary subbtn ${i.status === status ? "on" : ""}" data-merchant="${esc(i.merchant)}" data-status="${status}">${label}</button>`;
+  const head = `<div class="card subs-sum">
+      <div class="cut-row"><span class="subject">${s.items.length} repeating charges</span><span class="amt">${usd(s.monthly_total)}/mo</span></div>
+      <div class="meta">${usd(s.yearly_total)} a year${s.to_review ? ` · ${s.to_review} to review` : " · all reviewed"}</div>
+      ${s.cancel_yearly ? `<div class="verdict good">Cancelling what you marked saves ${usd(s.cancel_yearly)}/yr${s.cancel_by_target ? ` (${usd(s.cancel_by_target)} more by your house date)` : ""}.</div>` : ""}
+      <p class="meta" style="margin:8px 0 0">For each one, ask: did I use it in the last month? If not, mark it Cancel, then cancel it with the company. You'll see a warning here if it charges again.</p></div>`;
+  const alerts = s.items.filter((i) => i.still_charging).map((i) =>
+      `<p class="notice">${esc(i.merchant)} charged again on ${shortDate(i.last_charged)} after you marked it Cancel. Check it was really cancelled.</p>`).join("") +
+    s.overlaps.map((o) => `<p class="notice">You pay for ${o.merchants.length} ${esc(o.group)} (${o.merchants.map(esc).join(", ")}): ${usd(o.yearly)}/yr together. Could you keep just one?</p>`).join("");
+  const items = s.items.map((i) => `<li class="${i.status === "cancel" ? "sub-cancel" : ""}">
+      <div class="cut-row"><span class="subject">${esc(i.merchant)}</span><span class="amt">${usd(i.amount, true)}/${CADENCE[i.cadence]}</span></div>
+      <div class="meta">${esc(i.category)} · ${usd(i.yearly)}/yr · last ${shortDate(i.last_charged)}, next ~${shortDate(i.next_expected)}</div>
+      ${i.previous_amount ? `<div class="meta warn-text">Price went up from ${usd(i.previous_amount, true)}</div>` : ""}
+      <div class="acct-btns">${mark(i, "keep", "Keep")}${mark(i, "cancel", "Cancel")}${mark(i, "unsure", "Not sure")}</div></li>`).join("");
+  const once = s.once.length ? `<h2>Charged once this year</h2>
+      <p class="meta" style="margin:0 4px 8px">Subscriptions with a single charge so far: often a yearly plan or a free trial that turned paid.</p>
+      <ul class="list">${s.once.map((o) => `<li><div class="cut-row"><span class="subject">${esc(o.merchant)}</span><span class="amt">${usd(o.amount, true)}</span></div>
+      <div class="meta">Charged ${shortDate(o.charged)}</div></li>`).join("")}</ul>` : "";
+  $("subs").innerHTML = head + alerts + (items ? `<ul class="list" style="margin-top:12px">${items}</ul>` : "") + once;
+}
+
 async function loadBudget() {
   try { renderBudget(await api("/api/budget")); }
   catch (e) { if (e.message !== "unauthorized") { $("bnote").hidden = false; $("bnote").textContent = "Can't load the budget: " + e.message; } }
@@ -300,7 +325,11 @@ $("gsave").addEventListener("click", () => {
 
 $("view-budget").addEventListener("click", async (ev) => {
   const t = ev.target;
-  if (t.matches(".toggle[data-acct]")) {
+  if (t.matches(".subbtn")) {
+    const cur = budgetData.subscriptions.items.find((i) => i.merchant === t.dataset.merchant);
+    budgetPost("/api/budget/subscription", {
+      merchant: t.dataset.merchant, status: cur && cur.status === t.dataset.status ? null : t.dataset.status });
+  } else if (t.matches(".toggle[data-acct]")) {
     const a = budgetData.accounts.find((x) => x.id === t.dataset.acct);
     budgetPost(`/api/budget/accounts/${encodeURIComponent(a.id)}`, { [t.dataset.flag]: !a[t.dataset.flag] });
   } else if (t.matches(".setlimit")) {

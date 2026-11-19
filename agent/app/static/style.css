@@ -97,6 +97,9 @@ details.more summary { font-size: 13px; text-transform: uppercase; letter-spacin
 .toggle.on { background: var(--ok); color: #fff; }
 .acct-row, .cat-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .acct-row .subject { min-width: 0; }
+.subs-sum .verdict { margin-top: 8px; }
+.sub-cancel .subject { text-decoration: line-through; color: var(--muted); }
+.warn-text { color: var(--warn); }
 .acct-btns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 .cat-row { cursor: pointer; }
 .txns { font-size: 13px; color: var(--muted); margin-top: 8px; display: grid; gap: 4px; }
