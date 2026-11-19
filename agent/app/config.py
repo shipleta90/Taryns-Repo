@@ -36,7 +36,8 @@ class Settings:
     morning_effort: str = "medium"
     morning_about: str = ""          # one line about you, to tailor the briefing
     morning_company: str = ""        # companies/industry for the "Company & Industry Watch" section
-    budget_sync_at: str = "05:15"     # daily bank sync; "" turns it off
+    budget_sync_at: str = "05:15"     # bank sync time; "" turns it off
+    budget_sync_day: str = ""         # e.g. "sunday" to sync once a week; "" = every day
     timezone: str = "America/Los_Angeles"
     owner_name: str = "Taryn"            # emails are written and signed as this person
     assistant_name: str = "Bruce"
@@ -80,6 +81,7 @@ def load_settings() -> Settings:
         morning_about=os.environ.get("MORNING_ABOUT", ""),
         morning_company=os.environ.get("MORNING_COMPANY_WATCH", ""),
         budget_sync_at=os.environ.get("BUDGET_SYNC_AT", "05:15"),
+        budget_sync_day=os.environ.get("BUDGET_SYNC_DAY", ""),
         timezone=os.environ.get("TIMEZONE", "America/Los_Angeles"),
         owner_name=os.environ.get("OWNER_NAME", "Taryn"),
         assistant_name=os.environ.get("ASSISTANT_NAME", "Bruce"),
