@@ -87,6 +87,20 @@ def test_running_hot_flags_category_over_its_usual_pace():
     assert hot[0]["category"] == "Dining" and hot[0]["usual"] == 200 and hot[0]["projected"] > 500
 
 
+def test_running_hot_says_what_is_driving_it():
+    txns = [tx("DOORDASH", -60, 2026, m, d, "Dining") for m in (7, 8, 9) for d in (3, 17)]   # usually 2 x $60
+    txns += [tx("BLUE BOTTLE", -30, 2026, m, 5, "Dining") for m in (7, 8, 9)]
+    txns += [tx("DOORDASH", -55, 2026, 10, d, "Dining") for d in (1, 4, 7, 11, 15, 18)]       # 6 orders so far
+    txns += [tx("BLUE BOTTLE", -30, 2026, 10, 5, "Dining")]                                   # normal
+    txns += [tx("NOBU", -240, 2026, 10, 14, "Dining")]                                         # new, one big night
+    hot = budget.running_hot(txns, TODAY)[0]
+    assert [d["merchant"] for d in hot["drivers"]] == ["DOORDASH", "NOBU"]                     # Blue Bottle is normal
+    dd, nobu = hot["drivers"]
+    assert nobu["new"] and nobu["spent"] == 240 and nobu["count"] == 1
+    assert not dd["new"] and dd["spent"] == 330 and dd["count"] == 6 and dd["usual"] == 120 and dd["usual_count"] == 2
+    assert hot["largest"] == {"merchant": "NOBU", "amount": 240.0, "date": "2026-10-14"}
+
+
 def test_refunds_reduce_spending_and_transfers_dont_count():
     txns = [tx("TARGET", -100, 2026, 10, 2, "Shopping"), tx("TARGET", 30, 2026, 10, 4, "Shopping"),
             tx("PAYMENT THANK YOU", -1000, 2026, 10, 5, "Transfer")]

@@ -221,9 +221,16 @@ function renderBudget(d) {
   renderSubs(d.subscriptions);
   const hot = d.cuts.running_hot;
   $("cuts-wrap").hidden = !hot.length;
+  const times = (n) => (n === 1 ? "1 charge" : `${n} charges`);
+  const driver = (x) => x.new
+    ? `<li><b>${esc(x.merchant)}</b>: ${usd(x.spent)} so far (${times(x.count)}), new this month</li>`
+    : `<li><b>${esc(x.merchant)}</b>: ${usd(x.spent)} so far (${times(x.count)}) vs. usually ${usd(x.usual)}/mo (about ${x.usual_count} charges)</li>`;
   $("cuts").innerHTML = `<ul class="list">${hot.map((h) => `<li>
       <div class="cut-row"><span class="subject">${esc(h.category)}</span><span class="amt">+${usd(h.over_by)}</span></div>
-      <div class="meta">On pace for ${usd(h.projected)} vs. usual ${usd(h.usual)}</div></li>`).join("")}</ul>`;
+      <div class="meta">On pace for ${usd(h.projected)} vs. usual ${usd(h.usual)}</div>
+      ${h.drivers && h.drivers.length ? `<div class="meta" style="margin-top:6px">What's driving it:</div><ul class="drivers">${h.drivers.map(driver).join("")}</ul>`
+        : `<div class="meta">No single place stands out; it may even out by the end of the month.</div>`}
+      ${h.largest ? `<div class="meta">Biggest charge: ${esc(h.largest.merchant)} ${usd(h.largest.amount, true)} on ${shortDate(h.largest.date)}</div>` : ""}</li>`).join("")}</ul>`;
 
   $("month-title").textContent = "This month · " + new Date(d.month + "-15").toLocaleDateString([], { month: "long" });
   $("cats").setAttribute("aria-label", `Spending this month with ${d.average_months}-month averages`);
