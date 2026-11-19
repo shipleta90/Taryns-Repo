@@ -68,8 +68,8 @@ flags categories running hot, and lets you set monthly category limits.
 
 - **Data:** read-only bank and card feed through [SimpleFIN Bridge](https://bridge.simplefin.org) (it cannot
   move money). Connect both partners' banks in one SimpleFIN account, create a Setup Token, then on the
-  Mini run `python -m app.secrets set-simplefin`. Syncs daily at `BUDGET_SYNC_AT` (default 05:15) and on
-  demand. First sync pulls 6 months.
+  Mini run `python -m app.secrets set-simplefin`. Syncs daily at `BUDGET_SYNC_AT` (default 05:15), or once a week if
+  `BUDGET_SYNC_DAY` names a day (e.g. `sunday`), and on demand. First sync pulls 6 months.
 - **Cards SimpleFIN can't reach:** import the card's "download transactions" CSV in the app (Chase, Amex,
   Citi, BofA, Capital One, Apple Card layouts; re-importing never duplicates).
 - **Private by design:** banking data never goes to Claude. Merchants are categorized by keyword rules,

@@ -22,7 +22,7 @@ from . import hub as hub_mod
 from . import calcheck
 from .assistant import Assistant
 from .llm import LocalLLM
-from .scheduler import daily
+from .scheduler import daily, weekday_number
 
 STATIC = Path(__file__).parent / "static"
 log = logging.getLogger("agent")
@@ -301,7 +301,12 @@ def create_app(settings: Settings | None = None, gmail=None, db: Database | None
         if settings.followup_check_minutes > 0:
             tasks.append(asyncio.create_task(watch_followups()))
         if settings.budget_sync_at:
-            tasks.append(asyncio.create_task(daily(settings.budget_sync_at, run_budget_sync)))
+            try:
+                sync_day = weekday_number(settings.budget_sync_day)
+            except ValueError:
+                log.warning("BUDGET_SYNC_DAY=%r isn't a day of the week; syncing daily", settings.budget_sync_day)
+                sync_day = None
+            tasks.append(asyncio.create_task(daily(settings.budget_sync_at, run_budget_sync, sync_day)))
         if settings.briefing_enabled and settings.briefing_at:
             tasks.append(asyncio.create_task(daily(settings.briefing_at, run_briefing)))
         yield

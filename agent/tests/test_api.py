@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.config import Settings
 from app.main import create_app
-from app.scheduler import seconds_until
+from app.scheduler import seconds_until, weekday_number
 from tests.fakes import FakeGmail, FakeLLM, promo
 
 AUTH = {"Authorization": "Bearer secret"}
@@ -56,6 +56,19 @@ def test_seconds_until():
     now = dt.datetime(2026, 1, 1, 1, 0)
     assert seconds_until("02:30", now) == 5400
     assert seconds_until("00:30", now) == 23.5 * 3600
+
+
+def test_weekly_schedule():
+    import datetime as dt
+    thu_1am = dt.datetime(2026, 11, 19, 1, 0)          # a Thursday
+    sunday = weekday_number("Sunday")
+    assert sunday == 6 and weekday_number("mon") == 0 and weekday_number("Sundays") == 6
+    assert weekday_number("") is None
+    assert seconds_until("05:15", thu_1am, sunday) == 3 * 86400 + 4.25 * 3600
+    assert seconds_until("05:15", thu_1am, 3) == 4.25 * 3600                 # later today
+    assert seconds_until("00:30", thu_1am, 3) == 7 * 86400 - 0.5 * 3600      # already passed: next week
+    with pytest.raises(ValueError):
+        weekday_number("someday")
 
 
 def test_briefing_endpoints(client):
