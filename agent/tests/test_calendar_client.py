@@ -75,3 +75,20 @@ def test_falls_back_to_main_calendar_without_list_permission():
                   list_error=RuntimeError("insufficient scope"))
     out = cal_with(svc).list_events(T0, T1)
     assert [e["title"] for e in out] == ["Dentist"] and svc.queried == ["primary"]
+
+
+def test_calendar_id_finds_family_calendar_by_name():
+    svc = FakeSvc(calendars=[{"id": "primary", "summary": "me@x.com"},
+                             {"id": "fam123@group.calendar.google.com", "summary": "family"}],
+                  events_by_cal={})
+    c = cal_with(svc)
+    assert c.calendar_id("Family") == "fam123@group.calendar.google.com"
+    assert c.calendar_id("Work") is None
+
+
+def test_calendar_id_uses_renamed_name_and_survives_errors():
+    svc = FakeSvc(calendars=[{"id": "f1", "summary": "Shipley Family", "summaryOverride": "Family"}],
+                  events_by_cal={})
+    assert cal_with(svc).calendar_id("Family") == "f1"
+    broken = FakeSvc(calendars=[], events_by_cal={}, list_error=RuntimeError("403"))
+    assert cal_with(broken).calendar_id("Family") is None
