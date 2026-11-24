@@ -57,6 +57,22 @@ class GoogleCalendar:
                 for c in items if c.get("selected") and not c.get("hidden")]
         return cals or [{"id": "primary", "name": "Main"}]
 
+    def calendar_id(self, name: str) -> str | None:
+        """The id of the calendar called `name` (e.g. "Family"), matched case-insensitively on the
+        name shown in Google Calendar. Only calendars you can add events to count. None if not found."""
+        want = (name or "").strip().lower()
+        if not want:
+            return None
+        try:
+            items = self.svc.calendarList().list(minAccessRole="writer").execute().get("items", [])
+        except Exception:
+            return None
+        for c in items:
+            names = {(c.get("summaryOverride") or "").strip().lower(), (c.get("summary") or "").strip().lower()}
+            if want in names:
+                return c["id"]
+        return None
+
     def list_events(self, start: dt.datetime, end: dt.datetime, limit: int = 100) -> list[dict]:
         found = []
         for cal in self._calendars():
